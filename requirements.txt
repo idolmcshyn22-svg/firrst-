@@ -1,0 +1,17 @@
+# HTML Element Focuser Requirements
+# Python 3.7+ required
+
+# Core dependencies - using only Python standard library
+# No external dependencies required for basic functionality
+
+# Optional dependencies for enhanced features (uncomment if needed):
+# beautifulsoup4>=4.9.0    # For advanced HTML parsing
+# lxml>=4.6.0              # Fast XML/HTML parser
+# requests>=2.25.0         # For fetching HTML from URLs
+# click>=8.0.0             # For enhanced CLI interface
+
+# Development dependencies:
+# pytest>=6.0.0            # For testing
+# black>=21.0.0            # Code formatting
+# flake8>=3.8.0            # Code linting
+# mypy>=0.800              # Type checking
