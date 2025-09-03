@@ -58,6 +58,7 @@ class FacebookGroupsScraper:
         self.current_post_url = ""
         self.current_group_id = ""
         self.current_post_id = ""
+        self.current_comment_id = None
         options = Options()
         if headless:
             options.add_argument("--headless=new")
@@ -168,30 +169,39 @@ class FacebookGroupsScraper:
         try:
             print(f"🔍 FIXED: Extracting post info from URL: {post_url}")
             
-            # Extract group ID and post ID from URL
-            # Format: https://www.facebook.com/groups/GROUP_ID/posts/POST_ID
-            group_match = re.search(r'/groups/([^/]+)/', post_url)
-            post_match = re.search(r'/posts/(\d+)', post_url)
+            # FIXED: Use the same parsing logic as your example
+            from urllib.parse import urlparse, parse_qs
             
-            if group_match:
-                self.current_group_id = group_match.group(1)
-                print(f"📊 Extracted Group ID: {self.current_group_id}")
+            parsed = urlparse(post_url)
+            path_parts = parsed.path.strip("/").split("/")
+            query = parse_qs(parsed.query)
             
-            if post_match:
-                self.current_post_id = post_match.group(1)
-                print(f"📊 Extracted Post ID: {self.current_post_id}")
+            # Extract group ID
+            if "groups" in path_parts:
+                idx = path_parts.index("groups")
+                if len(path_parts) > idx + 1:
+                    self.current_group_id = path_parts[idx + 1]
+                    print(f"📊 Extracted Group ID: {self.current_group_id}")
             
-            # Alternative: extract from comment_id parameter
-            comment_id_match = re.search(r'comment_id=(\d+)', post_url)
-            if comment_id_match:
-                comment_id = comment_id_match.group(1)
-                print(f"📊 Found comment ID: {comment_id}")
+            # Extract post ID
+            if "posts" in path_parts:
+                idx_post = path_parts.index("posts")
+                if len(path_parts) > idx_post + 1:
+                    self.current_post_id = path_parts[idx_post + 1]
+                    print(f"📊 Extracted Post ID: {self.current_post_id}")
+            
+            # Extract comment ID from query parameter
+            if "comment_id" in query:
+                self.current_comment_id = query["comment_id"][0]
+                print(f"📊 Found comment ID: {self.current_comment_id}")
+            else:
+                self.current_comment_id = None
                 
         except Exception as e:
             print(f"⚠️ Error extracting post info: {e}")
 
     def generate_post_link(self, user_id="", username=""):
-        """FIXED: Generate link to the original post (not user's posts)"""
+        """FIXED: Generate link to the original post with comment_id like your example"""
         try:
             if not self.current_group_id or not self.current_post_id:
                 return ""
@@ -199,6 +209,10 @@ class FacebookGroupsScraper:
             # FIXED: Generate link to the original Groups post
             # Format: https://www.facebook.com/groups/GROUP_ID/posts/POST_ID/
             post_link = f"https://www.facebook.com/groups/{self.current_group_id}/posts/{self.current_post_id}/"
+            
+            # FIXED: Add comment_id if available (like your example)
+            if self.current_comment_id:
+                post_link += f"?comment_id={self.current_comment_id}"
             
             print(f"🔗 FIXED: Generated post link: {post_link}")
             return post_link
