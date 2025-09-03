@@ -156,52 +156,96 @@ class FacebookGroupsScraper:
         return False
 
     def find_target_container(self):
-        """FIXED: Find the target container with improved height detection"""
-        print("🎯 Finding target container with larger height...")
+        """FIXED: Find the specific Facebook container with enhanced detection"""
+        print("🎯 Finding target container with specific Facebook classes...")
         
         try:
-            # Look for containers with data-thumb='1'
-            containers = self.driver.find_elements(By.XPATH, "//div[@data-thumb='1']")
-            
-            if not containers:
-                print("⚠️ No containers with data-thumb='1' found")
-                return None
-            
-            print(f"Found {len(containers)} potential containers with data-thumb='1'")
+            # FIXED: Target the specific container structure you mentioned
+            specific_selectors = [
+                # Your exact container structure
+                "//div[@class='x14nfmen x1s85apg x5yr21d xtijo5x xg01cxk x10l6tqk x13vifvy x1wsgiic x19991ni xwji4o3 x1kky2od x1sd63oq' and @data-visualcompletion='ignore' and @data-thumb='1']",
+                
+                # Fallback: partial class match with data attributes
+                "//div[contains(@class, 'x14nfmen') and contains(@class, 'x1s85apg') and @data-thumb='1']",
+                
+                # Fallback: any container with data-thumb='1' and significant height
+                "//div[@data-thumb='1' and @data-visualcompletion='ignore']",
+                
+                # General fallback
+                "//div[@data-thumb='1']"
+            ]
             
             target_container = None
             max_height = 0
             
-            for idx, container in enumerate(containers, 1):
+            for selector_idx, selector in enumerate(specific_selectors, 1):
                 try:
-                    # Get computed height
-                    height = self.driver.execute_script("return arguments[0].offsetHeight;", container)
+                    containers = self.driver.find_elements(By.XPATH, selector)
+                    print(f"Selector {selector_idx}: Found {len(containers)} containers")
                     
-                    # Also check style height
-                    style = container.get_attribute('style') or ""
-                    style_height_match = re.search(r'height:\s*(\d+)px', style)
-                    style_height = int(style_height_match.group(1)) if style_height_match else 0
+                    if not containers:
+                        continue
                     
-                    # Use the larger of the two heights
-                    actual_height = max(height, style_height)
+                    for idx, container in enumerate(containers, 1):
+                        try:
+                            # Get multiple height measurements
+                            offset_height = self.driver.execute_script("return arguments[0].offsetHeight;", container)
+                            scroll_height = self.driver.execute_script("return arguments[0].scrollHeight;", container)
+                            client_height = self.driver.execute_script("return arguments[0].clientHeight;", container)
+                            
+                            # Also check style height
+                            style = container.get_attribute('style') or ""
+                            style_height_match = re.search(r'height:\s*(\d+)px', style)
+                            style_height = int(style_height_match.group(1)) if style_height_match else 0
+                            
+                            # Get class for verification
+                            container_class = container.get_attribute('class') or ""
+                            
+                            # FIXED: Use the maximum height found
+                            actual_height = max(offset_height, scroll_height, client_height, style_height)
+                            
+                            print(f"   Container {idx}: height={actual_height}px (offset:{offset_height}, scroll:{scroll_height}, client:{client_height}, style:{style_height})")
+                            print(f"     Classes: {container_class[:100]}...")
+                            
+                            # FIXED: Prioritize containers with the specific classes you mentioned
+                            is_target_class = ('x14nfmen' in container_class and 'x1s85apg' in container_class)
+                            
+                            if actual_height > max_height or (is_target_class and actual_height > 1000):
+                                max_height = actual_height
+                                target_container = container
+                                print(f"     🎯 NEW BEST: height={actual_height}px, target_class={is_target_class}")
+                                
+                        except Exception as e:
+                            print(f"   Container {idx}: error getting height - {e}")
+                            continue
                     
-                    if actual_height > 0:
-                        print(f" Container {idx}: height = {actual_height}px (offset: {height}px, style: {style_height}px)")
-                    
-                    if actual_height > max_height:
-                        max_height = actual_height
-                        target_container = container
+                    # If we found a good container with the first selector, use it
+                    if target_container and max_height > 1000:
+                        break
                         
                 except Exception as e:
-                    print(f" Container {idx}: error getting height - {e}")
+                    print(f"Selector {selector_idx} failed: {e}")
                     continue
             
-            if target_container and max_height > 100:  # Minimum reasonable height
+            if target_container and max_height > 100:
                 print(f"✅ Selected container with height: {max_height}px")
                 
-                # Scroll to make the container visible
-                self.driver.execute_script("arguments[0].scrollIntoView({behavior: 'smooth', block: 'start'});", target_container)
-                time.sleep(2)
+                # FIXED: Better scroll into view
+                try:
+                    # Scroll to make the container visible
+                    self.driver.execute_script("arguments[0].scrollIntoView({behavior: 'smooth', block: 'start'});", target_container)
+                    time.sleep(2)
+                    
+                    # Verify container is scrollable
+                    is_scrollable = self.driver.execute_script("""
+                        var elem = arguments[0];
+                        return elem.scrollHeight > elem.clientHeight;
+                    """, target_container)
+                    
+                    print(f"📊 Container scrollable: {is_scrollable}")
+                    
+                except Exception as e:
+                    print(f"Error scrolling container into view: {e}")
                 
                 return target_container
             else:
@@ -213,29 +257,75 @@ class FacebookGroupsScraper:
             return None
 
     def scroll_to_load_all_comments(self):
-        """FIXED: Enhanced scroll that ensures reaching the absolute bottom"""
-        print("📜 Starting FIXED gradual scroll to load all comments...")
+        """FIXED: Enhanced scroll targeting specific Facebook container"""
+        print("📜 Starting FIXED scroll for specific Facebook container...")
         
         try:
-            # Find the comments container
-            target_container = self.find_target_container()
+            # FIXED: Direct targeting of your specific container
+            specific_container_xpath = "//div[@class='x14nfmen x1s85apg x5yr21d xtijo5x xg01cxk x10l6tqk x13vifvy x1wsgiic x19991ni xwji4o3 x1kky2od x1sd63oq' and @data-visualcompletion='ignore' and @data-thumb='1']"
+            
+            target_containers = self.driver.find_elements(By.XPATH, specific_container_xpath)
+            
+            if not target_containers:
+                print("⚠️ Specific container not found, trying fallback...")
+                # Fallback to general method
+                target_container = self.find_target_container()
+            else:
+                # FIXED: Select the container with largest height from specific matches
+                target_container = None
+                max_height = 0
+                
+                for idx, container in enumerate(target_containers, 1):
+                    try:
+                        style = container.get_attribute('style') or ""
+                        height_match = re.search(r'height:\s*(\d+)px', style)
+                        
+                        if height_match:
+                            height = int(height_match.group(1))
+                            print(f"🎯 Specific container {idx}: height = {height}px")
+                            
+                            if height > max_height:
+                                max_height = height
+                                target_container = container
+                                
+                    except Exception as e:
+                        print(f"Error checking container {idx}: {e}")
+                        continue
+                
+                if target_container:
+                    print(f"✅ Selected specific container with height: {max_height}px")
+                else:
+                    print("❌ No suitable specific container found")
+                    return False
             
             if not target_container:
-                print("❌ Comments container not found")
+                print("❌ No container found (both specific and fallback failed)")
                 return False
             
-            # Get container dimensions
+            # Get container dimensions and properties
             container_rect = target_container.rect
             container_top = container_rect['y']
             
-            # Get the actual scrollable height
+            # Get scrolling properties
             container_scroll_height = self.driver.execute_script("return arguments[0].scrollHeight;", target_container)
             container_client_height = self.driver.execute_script("return arguments[0].clientHeight;", target_container)
+            container_offset_height = self.driver.execute_script("return arguments[0].offsetHeight;", target_container)
             
-            print(f"📐 Container dimensions:")
+            # Check if container is actually scrollable
+            is_scrollable = container_scroll_height > container_client_height
+            
+            print(f"📐 FIXED Container analysis:")
             print(f"   Top position: {container_top}px")
             print(f"   Scroll height: {container_scroll_height}px")
             print(f"   Client height: {container_client_height}px")
+            print(f"   Offset height: {container_offset_height}px")
+            print(f"   Is scrollable: {is_scrollable}")
+            
+            # FIXED: If container is not scrollable, scroll the main window instead
+            if not is_scrollable:
+                print("⚠️ Container is not scrollable, using main window scroll...")
+                return self.scroll_main_window_to_load_comments(target_container)
+            
             
             # FIXED: Enhanced scroll strategy with absolute bottom guarantee
             scroll_step = 500  # Optimized steps for better loading
@@ -360,6 +450,244 @@ class FacebookGroupsScraper:
             print(f"❌ Error during FIXED comment scrolling: {e}")
             return False
 
+    def scroll_main_window_to_load_comments(self, reference_container=None):
+        """FIXED: Scroll main window when container is not directly scrollable"""
+        print("📜 FIXED: Scrolling main window to load all comments...")
+        
+        try:
+            # Get initial page state
+            initial_page_height = self.driver.execute_script("return document.body.scrollHeight;")
+            window_height = self.driver.execute_script("return window.innerHeight;")
+            
+            print(f"📐 Initial page state:")
+            print(f"   Page height: {initial_page_height}px")
+            print(f"   Window height: {window_height}px")
+            
+            if reference_container:
+                container_rect = reference_container.rect
+                container_bottom = container_rect['y'] + container_rect['height']
+                print(f"   Container bottom: {container_bottom}px")
+            
+            # FIXED: Enhanced main window scrolling
+            scroll_step = 800
+            scroll_pause = 3.0  # Longer pause for Facebook's lazy loading
+            max_attempts = 100
+            no_change_count = 0
+            previous_page_height = initial_page_height
+            
+            for attempt in range(max_attempts):
+                if self._stop_flag:
+                    break
+                
+                # Get current scroll position
+                current_scroll = self.driver.execute_script("return window.pageYOffset;")
+                current_page_height = self.driver.execute_script("return document.body.scrollHeight;")
+                
+                print(f"📜 Attempt {attempt+1}: scroll={current_scroll}px, page_height={current_page_height}px")
+                
+                # Check if we're at the bottom
+                max_scroll = current_page_height - window_height
+                if current_scroll >= max_scroll - 50:  # 50px tolerance
+                    print("🏁 Reached bottom of main window")
+                    
+                    # FIXED: Force scroll to absolute bottom multiple times
+                    for force_attempt in range(5):
+                        self.driver.execute_script("window.scrollTo(0, document.body.scrollHeight);")
+                        time.sleep(4)  # Extra time for lazy loading
+                        
+                        new_page_height = self.driver.execute_script("return document.body.scrollHeight;")
+                        if new_page_height > current_page_height:
+                            print(f"🎯 Force bottom {force_attempt+1} loaded more content: {current_page_height}px -> {new_page_height}px")
+                            current_page_height = new_page_height
+                        else:
+                            print(f"✅ Force bottom {force_attempt+1} confirmed no more content")
+                    
+                    break
+                
+                # Scroll down
+                next_scroll = min(current_scroll + scroll_step, max_scroll)
+                self.driver.execute_script(f"window.scrollTo(0, {next_scroll});")
+                time.sleep(scroll_pause)
+                
+                # Check for page height changes (new content loaded)
+                if current_page_height > previous_page_height:
+                    print(f"    ✅ Page expanded: {previous_page_height}px -> {current_page_height}px")
+                    no_change_count = 0
+                    previous_page_height = current_page_height
+                else:
+                    no_change_count += 1
+                
+                # If stuck, try jumping to bottom
+                if no_change_count >= 3:
+                    print("    ⚡ Main window stuck, jumping to bottom...")
+                    self.driver.execute_script("window.scrollTo(0, document.body.scrollHeight);")
+                    time.sleep(5)  # Extra wait for potential content loading
+                    
+                    new_height = self.driver.execute_script("return document.body.scrollHeight;")
+                    if new_height > current_page_height:
+                        print(f"    🎯 Bottom jump revealed more content: {current_page_height}px -> {new_height}px")
+                        no_change_count = 0
+                        previous_page_height = new_height
+                    elif no_change_count >= 6:
+                        print("    🏁 No more content loading, stopping")
+                        break
+            
+            print("✅ FIXED main window scroll completed")
+            return True
+            
+        except Exception as e:
+            print(f"❌ Error during main window scrolling: {e}")
+            return False
+
+    def scroll_specific_facebook_container(self, target_container):
+        """FIXED: Specialized scrolling for Facebook's specific container structure"""
+        print("🎯 FIXED: Specialized scroll for Facebook container...")
+        
+        try:
+            # Get container properties
+            container_style = target_container.get_attribute('style') or ""
+            container_class = target_container.get_attribute('class') or ""
+            
+            print(f"📊 Container info:")
+            print(f"   Style: {container_style}")
+            print(f"   Classes: {container_class[:100]}...")
+            
+            # FIXED: For Facebook's specific container, try different scroll approaches
+            
+            # Method 1: Try scrolling the container itself
+            try:
+                print("🔄 Method 1: Direct container scroll...")
+                
+                # Check if container has overflow scroll
+                overflow_y = self.driver.execute_script("return getComputedStyle(arguments[0]).overflowY;", target_container)
+                print(f"   Overflow-Y: {overflow_y}")
+                
+                if overflow_y in ['scroll', 'auto']:
+                    # Container is scrollable
+                    for i in range(20):  # More attempts
+                        self.driver.execute_script("arguments[0].scrollTop = arguments[0].scrollHeight;", target_container)
+                        time.sleep(2)
+                        
+                        current_scroll = self.driver.execute_script("return arguments[0].scrollTop;", target_container)
+                        max_scroll = self.driver.execute_script("return arguments[0].scrollHeight - arguments[0].clientHeight;", target_container)
+                        
+                        print(f"     Scroll attempt {i+1}: {current_scroll}px / {max_scroll}px")
+                        
+                        if current_scroll >= max_scroll - 10:
+                            print("     ✅ Container scrolled to bottom")
+                            break
+                else:
+                    print("   ⚠️ Container not directly scrollable")
+                    
+            except Exception as e:
+                print(f"   Method 1 failed: {e}")
+            
+            # Method 2: Scroll main window while monitoring container
+            print("🔄 Method 2: Main window scroll with container monitoring...")
+            
+            container_rect = target_container.rect
+            container_top = container_rect['y']
+            container_height = container_rect['height']
+            container_bottom = container_top + container_height
+            
+            print(f"   Container bounds: {container_top}px to {container_bottom}px")
+            
+            # Scroll in increments, focusing on the container area
+            scroll_positions = []
+            
+            # Generate scroll positions that cover the entire container
+            current_pos = max(0, container_top - 500)  # Start a bit above
+            while current_pos < container_bottom + 500:  # Go a bit below
+                scroll_positions.append(current_pos)
+                current_pos += 400  # 400px increments
+            
+            # Add final position at absolute bottom
+            final_bottom = self.driver.execute_script("return document.body.scrollHeight;")
+            scroll_positions.append(final_bottom)
+            
+            print(f"   Generated {len(scroll_positions)} scroll positions")
+            
+            for i, scroll_pos in enumerate(scroll_positions):
+                if self._stop_flag:
+                    break
+                    
+                print(f"   📜 Scrolling to position {i+1}/{len(scroll_positions)}: {scroll_pos}px")
+                
+                self.driver.execute_script(f"window.scrollTo(0, {scroll_pos});")
+                time.sleep(3)  # Longer wait for content loading
+                
+                # Check if page expanded
+                new_page_height = self.driver.execute_script("return document.body.scrollHeight;")
+                if new_page_height > final_bottom:
+                    print(f"     🎯 Page expanded during scroll: {final_bottom}px -> {new_page_height}px")
+                    final_bottom = new_page_height
+                    # Add new bottom position
+                    scroll_positions.append(final_bottom)
+            
+            # Method 3: Final verification with multiple bottom attempts
+            print("🔄 Method 3: Final bottom verification...")
+            
+            for final_attempt in range(10):  # 10 final attempts
+                self.driver.execute_script("window.scrollTo(0, document.body.scrollHeight);")
+                time.sleep(3)
+                
+                current_height = self.driver.execute_script("return document.body.scrollHeight;")
+                current_scroll = self.driver.execute_script("return window.pageYOffset;")
+                
+                print(f"   Final attempt {final_attempt+1}: scroll={current_scroll}px, height={current_height}px")
+                
+                # Check if we're truly at bottom
+                window_height = self.driver.execute_script("return window.innerHeight;")
+                if current_scroll >= current_height - window_height - 10:
+                    print(f"   ✅ Confirmed at absolute bottom")
+                    break
+            
+            # Method 4: FIXED - Facebook lazy loading trigger
+            print("🔄 Method 4: Triggering Facebook lazy loading...")
+            
+            try:
+                # Simulate user scrolling behavior to trigger lazy loading
+                for lazy_attempt in range(15):  # 15 attempts to trigger all lazy content
+                    print(f"   🔄 Lazy loading attempt {lazy_attempt+1}/15...")
+                    
+                    # Scroll to different positions to trigger loading
+                    positions = [
+                        container_top,  # Top of container
+                        container_top + (container_height * 0.25),  # 25%
+                        container_top + (container_height * 0.5),   # 50%
+                        container_top + (container_height * 0.75),  # 75%
+                        container_bottom,  # Bottom of container
+                        self.driver.execute_script("return document.body.scrollHeight;")  # Page bottom
+                    ]
+                    
+                    for pos in positions:
+                        self.driver.execute_script(f"window.scrollTo(0, {pos});")
+                        time.sleep(1.5)
+                    
+                    # Final scroll to absolute bottom
+                    self.driver.execute_script("window.scrollTo(0, document.body.scrollHeight);")
+                    time.sleep(4)  # Extra wait for lazy loading
+                    
+                    # Check if more content loaded
+                    current_page_height = self.driver.execute_script("return document.body.scrollHeight;")
+                    if current_page_height > final_bottom + 100:  # Significant change
+                        print(f"     🎯 Lazy loading triggered: {final_bottom}px -> {current_page_height}px")
+                        final_bottom = current_page_height
+                    else:
+                        print(f"     ✅ No more lazy content to load")
+                        if lazy_attempt >= 3:  # Give it at least 3 attempts
+                            break
+                            
+            except Exception as e:
+                print(f"   Method 4 failed: {e}")
+            
+            print("✅ FIXED specialized container scroll completed")
+            return True
+            
+        except Exception as e:
+            print(f"❌ Error in specialized container scroll: {e}")
+            return False
+
     def complete_scroll_sequence(self):
         """FIXED: Complete 2-phase scrolling with enhanced bottom detection"""
         print("🎬 Starting FIXED complete scroll sequence...")
@@ -481,9 +809,19 @@ class FacebookGroupsScraper:
             print("❌ Could not find target container")
             return []
         
-        # FIXED: Ensure we have all content loaded by scrolling to bottom first
-        print("🎯 FIXED: Ensuring all content is loaded...")
-        self.complete_scroll_sequence()
+        # FIXED: Use specialized scroll for your specific container
+        print("🎯 FIXED: Using specialized scroll for your container...")
+        if target_container:
+            # Check if this is your specific container type
+            container_class = target_container.get_attribute('class') or ""
+            if 'x14nfmen' in container_class and 'x1s85apg' in container_class:
+                print("🎯 Detected your specific Facebook container, using specialized scroll...")
+                self.scroll_specific_facebook_container(target_container)
+            else:
+                print("🔄 Using general scroll sequence...")
+                self.complete_scroll_sequence()
+        else:
+            self.complete_scroll_sequence()
         
         # Re-find container after scrolling (it might have changed)
         target_container = self.find_target_container()
