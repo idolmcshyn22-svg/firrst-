@@ -15,6 +15,41 @@ A powerful Python utility for focusing on specific HTML elements based on their 
 
 ## 🚀 Quick Start
 
+### 1) Setup and Environment Activation
+
+```bash
+git clone https://github.com/idolmcshyn22-svg/firrst-.git
+cd firrst-
+
+# Create and activate a virtual environment
+python3 -m venv venv
+source venv/bin/activate   # On Windows: venv\Scripts\activate
+
+# Install dependencies
+pip install --upgrade pip
+pip install -r requirements.txt
+```
+
+### 2) Run the Facebook Groups Comment Scraper (GUI)
+
+Prerequisites:
+- Google Chrome installed
+
+Run:
+```bash
+python fb_group_comment_scrapper.py
+```
+
+In the GUI:
+- Paste a Facebook Groups post URL
+- Paste your Facebook cookie string
+- Choose output file (.xlsx or .csv)
+- Click “Bắt đầu FIXED Scraping”
+
+Notes:
+- If you encounter a Tkinter error on macOS, use a Python.org build that includes Tk or install Tk via Homebrew.
+- The scraper uses Selenium + ChromeDriver (managed automatically by webdriver-manager).
+
 ### Basic Usage
 
 ```python

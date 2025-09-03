@@ -1,6 +1,7 @@
 # fb_groups_scraper_focused.py - Focus on larger height element
 
 import time, random, threading, re, requests, pandas as pd
+from datetime import datetime
 import tkinter as tk
 from tkinter import filedialog, messagebox, ttk
 from selenium import webdriver
@@ -145,6 +146,9 @@ class FacebookGroupsScraper:
                 
                 # Try to switch to "All comments" view
                 self._switch_to_all_comments()
+
+                # Try to click "View more comments" button
+                self._click_view_more()
                 
                 return True
                     
@@ -172,153 +176,6 @@ class FacebookGroupsScraper:
             
         except Exception as e:
             print(f"⚠️ Error clearing cache: {e}")
-
-    def find_target_container(self):
-        """Find the container with larger height (3000+ px) instead of smaller one"""
-        print("🎯 Looking for target container with larger height...")
-        
-        try:
-            # Look for divs with data-visualcompletion="ignore" and data-thumb="1"
-            container_selector = "//div[@data-visualcompletion='ignore' and @data-thumb='1']"
-            containers = self.driver.find_elements(By.XPATH, container_selector)
-            
-            print(f"Found {len(containers)} potential containers with data-thumb='1'")
-            
-            target_container = None
-            max_height = 0
-
-            for i, container in enumerate(containers):
-                try:
-                    # Get style attribute
-                    style = container.get_attribute('style') or ""
-                    
-                    # Extract height from style
-                    height_match = re.search(r'height:\s*(\d+)px', style)
-                    if height_match:
-                        height = int(height_match.group(1))
-                        print(f"  Container {i+1}: height = {height}px")
-                        
-                        # Select the container with the largest height (prefer 3000+ px)
-                        if height > max_height:
-                            max_height = height
-                            target_container = container
-                            
-                except Exception as e:
-                    print(f"  Error analyzing container {i+1}: {e}")
-                    continue
-
-            if target_container:
-                print(f"✅ Selected container with height: {max_height}px")
-                
-                # Scroll to this container
-                self.driver.execute_script("arguments[0].scrollIntoView({behavior: 'smooth', block: 'center'});", target_container)
-                time.sleep(2)
-                
-                return target_container
-            else:
-                print("⚠️ No suitable container found, using document body")
-                return self.driver.find_element(By.TAG_NAME, "body")
-
-        except Exception as e:
-            print(f"Error finding target container: {e}")
-            return self.driver.find_element(By.TAG_NAME, "body")
-
-    def scroll_to_target_container(self):
-        """Find target container and scroll to it - THIS WAS THE MISSING METHOD"""
-        print("🎯 Finding and scrolling to target container...")
-        
-        # Find the target container
-        target_container = self.find_target_container()
-        
-        if target_container:
-            # Scroll through the comments in this container
-            success = self.scroll_through_comments_container(target_container)
-            if success:
-                print("✅ Successfully scrolled through target container")
-            else:
-                print("⚠️ Had issues scrolling, but continuing with container")
-        
-        return target_container
-
-    def scroll_through_comments_container(self, target_container):
-        """Scroll gradually through the comments container to load all content"""
-        print("📜 Starting gradual scroll through comments container...")
-        
-        try:
-            if not target_container:
-                print("❌ No target container provided")
-                return False
-            
-            # Get container height
-            style = target_container.get_attribute('style') or ""
-            height_match = re.search(r'height:\s*(\d+)px', style)
-            
-            if not height_match:
-                print("⚠️ Could not determine container height")
-                return False
-            
-            container_height = int(height_match.group(1))
-            print(f"📐 Container height: {container_height}px")
-            
-            # Get container position
-            container_rect = target_container.rect
-            container_top = container_rect['y']
-            
-            print(f"📍 Container position: top={container_top}px")
-            
-            # Scroll parameters
-            scroll_step = 600  # Smaller steps for better loading
-            scroll_pause = 2   # Longer pause to ensure loading
-            current_position = container_top
-            
-            # Start from the top of container
-            self.driver.execute_script(f"window.scrollTo(0, {container_top});")
-            time.sleep(3)
-            
-            print("🚀 Starting gradual scroll through comments...")
-            
-            step_count = 0
-            max_steps = (container_height // scroll_step) + 3  # +3 for safety
-            
-            while step_count < max_steps:
-                step_count += 1
-                current_position += scroll_step
-                
-                # Scroll to next position
-                self.driver.execute_script(f"window.scrollTo(0, {current_position});")
-                
-                # Check current scroll position
-                current_scroll = self.driver.execute_script("return window.pageYOffset;")
-                page_height = self.driver.execute_script("return document.body.scrollHeight;")
-                
-                print(f"📜 Step {step_count}/{max_steps}: scrolled to {current_scroll}px")
-                
-                # Wait for content to load
-                time.sleep(scroll_pause)
-                
-                # Check if we've scrolled past the container or reached page bottom
-                if current_scroll >= (container_top + container_height - 300):
-                    print("🏁 Reached end of comments container")
-                    break
-                    
-                if current_scroll >= (page_height - 1000):
-                    print("🏁 Reached page bottom")
-                    break
-            
-            print(f"✅ Completed comment scrolling in {step_count} steps")
-            
-            # Final scroll to make sure we're at the bottom of container
-            final_position = min(container_top + container_height, 
-                            self.driver.execute_script("return document.body.scrollHeight;") - 500)
-            self.driver.execute_script(f"window.scrollTo(0, {final_position});")
-            time.sleep(3)
-            
-            print("🎯 Final positioning completed")
-            return True
-            
-        except Exception as e:
-            print(f"❌ Error during comment scrolling: {e}")
-            return False
 
     def _switch_to_all_comments(self):
         """Switch to 'All comments' view to get more comments"""
@@ -351,12 +208,17 @@ class FacebookGroupsScraper:
             ]
             
             clicked = False
+            self.all_comments_button = None  # Store the button for later use
+            
             for selector in all_comments_selectors:
                 try:
                     elements = self.driver.find_elements(By.XPATH, selector)
                     for element in elements:
                         if element.is_displayed() and element.is_enabled():
                             print(f"  Found 'All comments' button: {element.text}")
+                            
+                            # Store the button for later use
+                            self.all_comments_button = element
                             
                             # Scroll into view
                             self.driver.execute_script("arguments[0].scrollIntoView({behavior: 'smooth', block: 'center'});", element)
@@ -375,10 +237,20 @@ class FacebookGroupsScraper:
                                     self.driver.execute_script("arguments[0].click();", element)
                                     clicked = True
                                     print("  ✅ Successfully clicked 'All comments' button (JS)")
-                                    time.sleep(4)
-                                    break
                                 except:
                                     continue
+
+                            # Click on div with role="menuitem" and tabindex="0"
+                            try:
+                                menuitem_element = self.driver.find_element(By.XPATH, "//div[@role='menuitem' and @tabindex='0']")
+                                self.driver.execute_script("arguments[0].click();", menuitem_element)
+                                print("  ✅ Successfully clicked menuitem div")
+                                time.sleep(2)  # Wait for any menu actions to complete
+                            except Exception as e:
+                                print(f"  ⚠️ Could not find or click menuitem div: {e}")
+                            
+                            time.sleep(4)
+                            break
                     
                     if clicked:
                         break
@@ -395,16 +267,410 @@ class FacebookGroupsScraper:
             print(f"  ⚠️ Error switching to 'All comments' view: {e}")
             print("  Proceeding with current view...")
 
+    def _click_view_more(self):
+        """Click on 'View more comments' button to load more comments"""
+        print("🔄 Attempting to click 'View more comments' button...")
+        
+        try:
+            time.sleep(3)
+            
+            # Enhanced selectors for view more button
+            view_more_selectors = [
+                "//div[contains(text(),'View more comments')]",
+                "//button[contains(text(),'View more comments')]",
+                "//a[contains(text(),'View more comments')]",
+                "//span[contains(text(),'View more comments')]"
+            ]
+
+            clicked = False
+            for selector in view_more_selectors:
+                try:
+                    elements = self.driver.find_elements(By.XPATH, selector)
+                    for element in elements:
+                        if element.is_displayed() and element.is_enabled():
+                            print(f"  Found 'View more comments' button: {element.text}")
+                            
+                            # Scroll into view
+                            self.driver.execute_script("arguments[0].scrollIntoView({behavior: 'smooth', block: 'center'});", element)
+                            time.sleep(1)
+                            
+                            # Try to click
+                            try:
+                                element.click()
+                                clicked = True
+                                print("  ✅ Successfully clicked 'View more comments' button")
+                                time.sleep(4)  # Wait for comments to load
+                                break
+                            except:
+                                # Try JavaScript click
+                                try:
+                                    self.driver.execute_script("arguments[0].click();", element)
+                                    clicked = True
+                                    print("  ✅ Successfully clicked 'View more comments' button (JS)")
+                                    
+                                    time.sleep(4)
+                                    break
+                                except:
+                                    continue
+                    
+                    if clicked:
+                        break
+                        
+                except Exception as e:
+                    continue
+            
+            if not clicked:
+                print("  ⚠️ Could not find or click 'View more comments' button, proceeding with current view")
+            else:
+                print("  🎯 Switched to 'View more comments' view successfully")
+                
+        except Exception as e:
+            print(f"  ⚠️ Error switching to 'View more comments' view: {e}")
+            print("  Proceeding with current view...")
+
+    def is_comment_div(self, div_element):
+        """Check if a div element contains comment-like content"""
+        try:
+            # Get text content
+            text = div_element.text.strip()
+            if len(text) < 10:  # Too short to be a meaningful comment
+                return False
+            
+            # Check for profile links (common in comments)
+            profile_links = div_element.find_elements(By.XPATH, ".//a[contains(@href, 'profile') or contains(@href, 'user') or contains(@href, 'facebook.com/')]")
+            if profile_links:
+                return True
+            
+            # Check for comment-specific attributes
+            aria_label = div_element.get_attribute('aria-label') or ''
+            if 'comment' in aria_label.lower() or 'bình luận' in aria_label.lower():
+                return True
+            
+            # Check for comment-specific classes
+            class_attr = div_element.get_attribute('class') or ''
+            if any(keyword in class_attr.lower() for keyword in ['comment', 'reply', 'response']):
+                return True
+            
+            # Check for comment-specific data attributes
+            data_ft = div_element.get_attribute('data-ft') or ''
+            if 'comment' in data_ft.lower():
+                return True
+            
+            # Check for role attribute
+            role = div_element.get_attribute('role') or ''
+            if role == 'article':
+                return True
+            
+            # Check for comment ID patterns
+            element_id = div_element.get_attribute('id') or ''
+            if 'comment' in element_id.lower():
+                return True
+            
+            # Check for time elements (comments often have timestamps)
+            time_elements = div_element.find_elements(By.XPATH, ".//time | .//span[contains(@class, 'time')] | .//a[contains(@class, 'time')]")
+            if time_elements:
+                return True
+            
+            # Check for like/reply buttons (common in comments)
+            action_buttons = div_element.find_elements(By.XPATH, ".//*[contains(text(), 'Like') or contains(text(), 'Reply') or contains(text(), 'Thích') or contains(text(), 'Trả lời')]")
+            if action_buttons:
+                return True
+            
+            # Check for reasonable text length and structure
+            if len(text) > 20 and ('@' in text or '.' in text or '!' in text or '?' in text):
+                return True
+            
+            return False
+            
+        except Exception as e:
+            print(f"Error checking if div is comment: {e}")
+            return False
+
     def extract_groups_comments(self):
         """FOCUSED comment extraction targeting larger height container"""
         print(f"=== EXTRACTING GROUPS COMMENTS (FOCUSED) ===")
-        
-        # Find and focus on the target container
-        target_container = self.scroll_to_target_container()
-        
-        if not target_container:
-            print("❌ Could not find target container")
-            return []
+
+        # Find "All comments" button's parent with class html-div
+        try:
+            # Use the all_comments_button from _switch_to_all_comments if available
+            all_comments_button = getattr(self, 'all_comments_button', None)
+            
+            if not all_comments_button:
+                print("⚠️ No 'All comments' button found from previous method, searching again...")
+                # Look for "All comments" button with various possible text variations
+                all_comments_selectors = [
+                    "//button[contains(text(), 'All comments')]",
+                    "//a[contains(text(), 'All comments')]",
+                    "//span[contains(text(), 'All comments')]",
+                    "//div[contains(text(), 'All comments')]",
+                    "//*[contains(text(), 'View all comments')]",
+                    "//*[contains(text(), 'See all comments')]",
+                    "//*[contains(text(), 'Show all comments')]"
+                ]
+                
+                for selector in all_comments_selectors:
+                    try:
+                        elements = self.driver.find_elements(By.XPATH, selector)
+                        if elements:
+                            all_comments_button = elements[0]
+                            print(f"✅ Found 'All comments' button using selector: {selector}")
+                            break
+                    except Exception as e:
+                        continue
+            else:
+                print("✅ Using 'All comments' button from _switch_to_all_comments method")
+            
+            if all_comments_button:
+                # Find the parent with class html-div
+                parent_with_html_div = None
+                
+                # Method 1: Get the closest parent with class containing 'html-div'
+                try:
+                    closest_parent = all_comments_button.find_element(By.XPATH, "ancestor::*[contains(@class, 'html-div')][1]")
+                    if closest_parent:
+                        parent_with_html_div = closest_parent
+                        print("✅ Found closest parent with html-div class")
+                except:
+                    pass
+                
+                # Method 2: Look for immediate parent with class containing 'html-div' (fallback)
+                if not parent_with_html_div:
+                    try:
+                        parent = all_comments_button.find_element(By.XPATH, "./..")
+                        if 'html-div' in parent.get_attribute('class') or 'html-div' in parent.get_attribute('className'):
+                            parent_with_html_div = parent
+                            print("✅ Found parent with html-div class (immediate parent)")
+                    except:
+                        pass
+                
+                # Method 3: Look for any ancestor with class containing 'html-div' (fallback)
+                if not parent_with_html_div:
+                    try:
+                        ancestors = all_comments_button.find_elements(By.XPATH, "ancestor::*[contains(@class, 'html-div')]")
+                        if ancestors:
+                            parent_with_html_div = ancestors[0]
+                            print("✅ Found parent with html-div class (ancestor)")
+                    except:
+                        pass
+                
+                # Method 4: Look for any div with class containing 'html-div' that contains the button (fallback)
+                if not parent_with_html_div:
+                    try:
+                        # More efficient: search only in the document body
+                        html_div_containers = self.driver.find_elements(By.XPATH, "//*[contains(@class, 'html-div')]")
+                        for container in html_div_containers:
+                            try:
+                                # Check if the button is a descendant of this container
+                                if container.find_element(By.XPATH, f".//*[contains(@text, '{all_comments_button.text}') or contains(@aria-label, '{all_comments_button.text}')]"):
+                                    parent_with_html_div = container
+                                    print("✅ Found parent with html-div class (container fallback)")
+                                    break
+                            except:
+                                continue
+                    except:
+                        pass
+                
+                if parent_with_html_div:
+                    print(f"✅ Successfully found 'All comments' button's parent with html-div class")
+                    print(f"   Parent tag: {parent_with_html_div.tag_name}")
+                    print(f"   Parent class: {parent_with_html_div.get_attribute('class')}")
+                    
+                    # Get comment parent divs that come after the "All comments" parent_with_html_div
+                    print("🔍 Searching for comment parent divs after 'All comments' parent...")
+                    
+                    comment_parent_divs = []
+                    
+                    # Method 1: Find the next div that comes immediately after the parent_with_html_div
+                    try:
+                        # Get only the next div that is a sibling of the parent_with_html_div
+                        next_div = parent_with_html_div.find_element(By.XPATH, "./following-sibling::div[1]")
+                        print(f"Found next div after parent_with_html_div")
+                        print(f"Next div class: {next_div.get_attribute('class')}")
+                        
+                        # Find and click "View more comments" button until no more comments
+                        print("🔄 Starting 'View more comments' click loop...")
+                        previous_comment_count = 0
+                        no_new_comments_count = 0
+                        max_no_new_comments = 3  # Stop after 3 consecutive checks with no new comments
+                        
+                        while no_new_comments_count < max_no_new_comments:
+                            # Look for "View more comments" button
+                            view_more_selectors = [
+                                "//button[contains(text(), 'View more comments')]",
+                                "//a[contains(text(), 'View more comments')]",
+                                "//span[contains(text(), 'View more comments')]",
+                                "//div[contains(text(), 'View more comments')]",
+                                "//*[contains(text(), 'View more')]",
+                                "//*[contains(text(), 'Show more comments')]",
+                                "//*[contains(text(), 'Load more comments')]",
+                                "//*[contains(text(), 'See more comments')]",
+                                "//button[contains(@aria-label, 'View more comments')]",
+                                "//a[contains(@aria-label, 'View more comments')]"
+                            ]
+                            
+                            view_more_button = None
+                            for selector in view_more_selectors:
+                                try:
+                                    elements = self.driver.find_elements(By.XPATH, selector)
+                                    if elements:
+                                        view_more_button = elements[0]
+                                        print(f"✅ Found 'View more comments' button using selector: {selector}")
+                                        break
+                                except Exception as e:
+                                    continue
+                            
+                            if view_more_button:
+                                try:
+                                    # Click the "View more comments" button
+                                    self.driver.execute_script("arguments[0].click();", view_more_button)
+                                    print("🖱️ Clicked 'View more comments' button")
+                                except Exception as e:
+                                    print(f"⚠️ Error clicking 'View more comments' button: {e}")
+                                    # Try alternative click method
+                                    try:
+                                        view_more_button.click()
+                                        print("🖱️ Clicked 'View more comments' button (alternative method)")
+                                    except Exception as e2:
+                                        print(f"⚠️ Alternative click also failed: {e2}")
+                                        break
+                            else:
+                                print("⚠️ No 'View more comments' button found")
+                                no_new_comments_count += 1
+                                print(f"⚠️ No new comments button detected ({no_new_comments_count}/{max_no_new_comments})")
+                                break
+                            
+                            # Wait 5 seconds for new comments to load
+                            print("⏳ Waiting 5 seconds for new comments to load...")
+                            time.sleep(5)
+                            
+                            # Count current comments
+                            current_comment_divs = []
+                            next_div_children = next_div.find_elements(By.XPATH, "./div")
+                            for child in next_div_children:
+                                if self.is_comment_div(child):
+                                    print(f"✅ Found comment div: {child.text}")
+                                    current_comment_divs.append(child)
+                            
+                            current_comment_count = len(current_comment_divs)
+                            print(f"📊 Current comment count: {current_comment_count} (previous: {previous_comment_count})")
+                            
+                            # Check if new comments were loaded
+                            if current_comment_count > previous_comment_count:
+                                print(f"✅ New comments detected! (+{current_comment_count - previous_comment_count})")
+                                previous_comment_count = current_comment_count
+                                no_new_comments_count = 0  # Reset counter
+                            else:
+                                no_new_comments_count += 1
+                                print(f"⚠️ No new comments detected ({no_new_comments_count}/{max_no_new_comments})")
+                            
+                            # Check for stop flag
+                            if self._stop_flag:
+                                print("⏹️ Stop flag detected, breaking click loop")
+                                break
+                        
+                        print(f"🏁 Click loop completed. Final comment count: {current_comment_count}")
+                        
+                        # Use the final comment divs
+                        comment_parent_divs = current_comment_divs
+                        print(f"🎯 Final comment divs found: {len(comment_parent_divs)}")
+
+                        if len(comment_parent_divs) > 0:
+                            print(f"🎯 Found {len(comment_parent_divs)} comment divs in next_div children")
+                            # Extract comment data from the found divs
+                            comments_data = []
+                            seen_content = set()
+                            
+                            for i, element in enumerate(comment_parent_divs):
+                                if self._stop_flag:
+                                    break
+                                    
+                                try:
+                                    print(f"\n--- Processing comment div {i+1}/{len(comment_parent_divs)} ---")
+                                    
+                                    comment_data = self.extract_comment_data_focused(element, i)
+                                    
+                                    if not comment_data:
+                                        continue
+                                    
+                                    # Deduplication
+                                    if comment_data['Name'] == "Unknown":
+                                        print("  ✗ Skipped: no username found")
+                                        continue
+                                        
+                                    # Check for duplicates
+                                    content_signature = f"{comment_data['Name']}_{comment_data['ProfileLink']}"
+                                    if content_signature in seen_content:
+                                        print("  ✗ Skipped: duplicate user")
+                                        continue
+                                    seen_content.add(content_signature)
+                                    
+                                    comment_data['Type'] = 'Comment'
+                                    comment_data['Layout'] = self.current_layout
+                                    comment_data['Source'] = 'All Comments Container'
+                                    
+                                    comments_data.append(comment_data)
+                                    print(f"  ✅ Added: {comment_data['Name']} - Profile: {comment_data['ProfileLink'][:50]}...")
+                                    
+                                except Exception as e:
+                                    print(f"  Error processing comment div {i}: {e}")
+                                    continue
+                            
+                            print(f"\n=== EXTRACTION COMPLETE: {len(comments_data)} comments ===")
+                            return comments_data
+                            
+                    except Exception as e:
+                        print(f"Error finding next div: {e}")
+                    
+                    print(f"🎯 Total comment parent divs found after 'All comments': {len(comment_parent_divs)}")
+                    # Extract comment data from the found divs
+                    comments_data = []
+                    seen_content = set()
+                    
+                    for i, element in enumerate(comment_parent_divs):
+                        if self._stop_flag:
+                            break
+                            
+                        try:
+                            print(f"\n--- Processing comment div {i+1}/{len(comment_parent_divs)} ---")
+                            
+                            comment_data = self.extract_comment_data_focused(element, i)
+                            
+                            if not comment_data:
+                                continue
+                            
+                            # Deduplication
+                            if comment_data['Name'] == "Unknown":
+                                print("  ✗ Skipped: no username found")
+                                continue
+                                
+                            # Check for duplicates
+                            content_signature = f"{comment_data['Name']}_{comment_data['ProfileLink']}"
+                            if content_signature in seen_content:
+                                print("  ✗ Skipped: duplicate user")
+                                continue
+                            seen_content.add(content_signature)
+                            
+                            comment_data['Type'] = 'Comment'
+                            comment_data['Layout'] = self.current_layout
+                            comment_data['Source'] = 'All Comments Container'
+                            
+                            comments_data.append(comment_data)
+                            print(f"  ✅ Added: {comment_data['Name']} - Profile: {comment_data['ProfileLink'][:50]}...")
+                            
+                        except Exception as e:
+                            print(f"  Error processing comment div {i}: {e}")
+                            continue
+                    
+                    print(f"\n=== EXTRACTION COMPLETE: {len(comments_data)} comments ===")
+                    return comments_data
+                else:
+                    print("❌ Could not find parent with html-div class for 'All comments' button")
+                    
+            else:
+                print("❌ Could not find 'All comments' button")
+                
+        except Exception as e:
+            print(f"❌ Error while searching for 'All comments' button's parent: {e}")
         
         # Save page for debugging
         try:
@@ -563,10 +829,8 @@ class FacebookGroupsScraper:
             
             print(f"  Processing: '{full_text[:60]}...'")
             
-            # Skip anonymous users
-            if any(keyword in full_text.lower() for keyword in ['ẩn danh', 'người tham gia ẩn danh', 'anonymous']):
-                print("  ⚠️ Skipping anonymous user comment")
-                return None
+            # Note: Do not skip comments containing 'anonymous'. Some groups label names like
+            # 'Anonymous participant 505'. We'll try to extract a meaningful name instead.
             
             username = "Unknown"
             profile_href = ""
@@ -632,6 +896,21 @@ class FacebookGroupsScraper:
             except Exception as e:
                 print(f"    Error in focused method: {e}")
             
+            # Fallback: If no username from links, try using the first line of the first child element's text
+            if username == "Unknown":
+                try:
+                    children = element.find_elements(By.XPATH, "./*")
+                    if children:
+                        first_child_text = (children[0].text or "").strip()
+                        if first_child_text:
+                            first_line = first_child_text.splitlines()[0].strip()
+                            # Basic validation for a plausible name line
+                            if first_line and 2 <= len(first_line) <= 120 and not first_line.startswith("http"):
+                                username = first_line
+                                print(f"      ✅ Fallback name from first child: {username}")
+                except Exception as e:
+                    print(f"      ⚠️ Fallback name extraction error: {e}")
+
             # Final validation
             if username == "Unknown":
                 print("  ❌ FOCUSED extraction failed for this element")
@@ -653,92 +932,26 @@ class FacebookGroupsScraper:
             print(f"Error in focused extraction: {e}")
             return None
 
-    def expand_groups_comments(self, max_iterations=50):
-        """Simplified but effective expansion focused on target container"""
-        print(f"=== EXPANDING GROUPS COMMENTS (FOCUSED) ===")
-        
-        # Focus on target container first
-        target_container = self.find_target_container()
-        
-        for iteration in range(max_iterations):
-            if self._stop_flag:
-                break
-                
-            print(f"[Iteration {iteration+1}] FOCUSED scrolling and expanding...")
-            
-            # Scroll within target container if possible
-            if target_container:
-                try:
-                    self.driver.execute_script("arguments[0].scrollTop = arguments[0].scrollHeight;", target_container)
-                    time.sleep(1)
-                except:
-                    pass
-            
-            # Also scroll the main page
-            self.driver.execute_script("window.scrollTo(0, document.body.scrollHeight);")
-            time.sleep(random.uniform(2, 3))
-            
-            # Look for expand links
-            expand_selectors = [
-                "//a[contains(text(),'View more comments')]",
-                "//a[contains(text(),'Xem thêm bình luận')]",
-                "//a[contains(text(),'Show more')]",
-                "//a[contains(text(),'See more')]",
-                "//div[@role='button' and (contains(text(),'more') or contains(text(),'thêm'))]"
-            ]
-            
-            expanded = False
-            for selector in expand_selectors:
-                try:
-                    elements = self.driver.find_elements(By.XPATH, selector)
-                    for elem in elements:
-                        if elem.is_displayed() and elem.is_enabled():
-                            try:
-                                elem.click()
-                                expanded = True
-                                print(f"    ✓ FOCUSED: Clicked: {elem.text}")
-                                time.sleep(3)
-                                break
-                            except:
-                                try:
-                                    self.driver.execute_script("arguments[0].click();", elem)
-                                    expanded = True
-                                    print(f"    ✓ FOCUSED: JS clicked: {elem.text}")
-                                    time.sleep(3)
-                                    break
-                                except:
-                                    continue
-                    if expanded:
-                        break
-                except:
-                    continue
-            
-            if not expanded and iteration > 5:
-                print(f"    No expansion found, stopping early")
-                break
-        
-        print("=== FOCUSED EXPANSION COMPLETE ===")
     def scrape_all_comments(self, limit=0, resolve_uid=True, progress_callback=None):
         """Main scraping orchestrator with FOCUSED approach"""
         print(f"=== STARTING FOCUSED GROUPS SCRAPING ===")
         
-        # Step 1: Expand all content with focus
-        self.expand_groups_comments()
-        
         if self._stop_flag:
             return []
         
-        # Step 2: Extract comments with focus
+        # Step 1: Extract comments with focus
         comments = self.extract_groups_comments()
         
-        # Step 3: Apply limit
-        if limit > 0:
-            comments = comments
+        # Step 2: Apply limit
+        if limit > 0 and len(comments) > limit:
+            comments = comments[:limit]
+            print(f"📊 Limited to {limit} comments")
         
-        # Step 4: Progress reporting
+        # Step 3: Progress reporting
         if progress_callback:
             progress_callback(len(comments))
         
+        print(f"✅ FOCUSED scraping completed: {len(comments)} comments extracted")
         return comments
 
     def close(self):
@@ -756,86 +969,88 @@ class FBGroupsAppGUI:
         self.root = root
         root.title("🎯 FB Groups Comment Scraper - FOCUSED")
         root.geometry("1100x950")
-        root.configure(bg="#e8f5e8")
+        root.configure(bg="#121212")
 
         # Main frame
-        main_frame = tk.Frame(root, bg="#e8f5e8")
+        main_frame = tk.Frame(root, bg="#121212")
         main_frame.pack(fill=tk.BOTH, expand=True, padx=20, pady=15)
 
         # Header
-        header_frame = tk.Frame(main_frame, bg="#e8f5e8")
+        header_frame = tk.Frame(main_frame, bg="#121212")
         header_frame.pack(fill="x", pady=(0,20))
         
         title_label = tk.Label(header_frame, text="🎯 Facebook Groups Comment Scraper - FOCUSED", 
-                              font=("Arial", 20, "bold"), bg="#e8f5e8", fg="#2d5a2d")
+                              font=("Arial", 20, "bold"), bg="#121212", fg="#a5d6a7")
         title_label.pack()
         
         subtitle_label = tk.Label(header_frame, text="🎯 Focused version - Targets larger height container (3161px vs 924px)", 
-                                 font=("Arial", 11), bg="#e8f5e8", fg="#5a5a5a")
+                                 font=("Arial", 11), bg="#121212", fg="#b0b0b0")
         subtitle_label.pack(pady=(5,0))
 
         # Input section
         input_frame = tk.LabelFrame(main_frame, text="📝 Thông tin bài viết Groups", font=("Arial", 12, "bold"), 
-                                   bg="#e8f5e8", fg="#2d5a2d", relief="groove", bd=2)
+                                   bg="#121212", fg="#a5d6a7", relief="groove", bd=2)
         input_frame.pack(fill="x", pady=(0,15))
 
-        tk.Label(input_frame, text="🔗 Link bài viết trong Groups:", bg="#e8f5e8", font=("Arial", 10)).pack(anchor="w", padx=15, pady=(15,5))
+        tk.Label(input_frame, text="🔗 Link bài viết trong Groups:", bg="#121212", font=("Arial", 10)).pack(anchor="w", padx=15, pady=(15,5))
         self.entry_url = tk.Entry(input_frame, width=100, font=("Arial", 9))
         self.entry_url.pack(fill="x", padx=15, pady=(0,10))
 
-        tk.Label(input_frame, text="🍪 Cookie Facebook (để truy cập Groups):", bg="#e8f5e8", font=("Arial", 10)).pack(anchor="w", padx=15, pady=(5,5))
+        tk.Label(input_frame, text="🍪 Cookie Facebook (để truy cập Groups):", bg="#121212", font=("Arial", 10)).pack(anchor="w", padx=15, pady=(5,5))
         self.txt_cookie = tk.Text(input_frame, height=4, font=("Arial", 8))
         self.txt_cookie.pack(fill="x", padx=15, pady=(0,15))
 
         # Options section
         options_frame = tk.LabelFrame(main_frame, text="🎯 Cấu hình FOCUSED Version", font=("Arial", 12, "bold"), 
-                                     bg="#e8f5e8", fg="#2d5a2d", relief="groove", bd=2)
+                                     bg="#121212", fg="#a5d6a7", relief="groove", bd=2)
         options_frame.pack(fill="x", pady=(0,15))
         
-        opt_grid = tk.Frame(options_frame, bg="#e8f5e8")
+        opt_grid = tk.Frame(options_frame, bg="#121212")
         opt_grid.pack(fill="x", padx=15, pady=15)
         
         # Options grid
-        tk.Label(opt_grid, text="📊 Số lượng comment:", bg="#e8f5e8").grid(row=0, column=0, sticky="w")
+        tk.Label(opt_grid, text="📊 Số lượng comment:", bg="#121212").grid(row=0, column=0, sticky="w")
         self.entry_limit = tk.Entry(opt_grid, width=10)
         self.entry_limit.insert(0, "0")
         self.entry_limit.grid(row=0, column=1, sticky="w", padx=(10,20))
-        tk.Label(opt_grid, text="(0 = tất cả)", bg="#e8f5e8", fg="#6c757d").grid(row=0, column=2, sticky="w")
+        tk.Label(opt_grid, text="(0 = tất cả)", bg="#121212", fg="#6c757d").grid(row=0, column=2, sticky="w")
 
         self.headless_var = tk.BooleanVar(value=False)  # Default to visible for debugging
         tk.Checkbutton(opt_grid, text="👻 Chạy ẩn", variable=self.headless_var,
-                      bg="#e8f5e8", font=("Arial", 9)).grid(row=1, column=0, sticky="w", pady=(10,0))
+                      bg="#121212", font=("Arial", 9)).grid(row=1, column=0, sticky="w", pady=(10,0))
 
         self.resolve_uid_var = tk.BooleanVar(value=True)
         tk.Checkbutton(opt_grid, text="🆔 Lấy UID", variable=self.resolve_uid_var, 
-                      bg="#e8f5e8", font=("Arial", 9)).grid(row=1, column=1, sticky="w", pady=(10,0))
+                      bg="#121212", font=("Arial", 9)).grid(row=1, column=1, sticky="w", pady=(10,0))
 
         # File section
         file_frame = tk.LabelFrame(main_frame, text="💾 Xuất kết quả", font=("Arial", 12, "bold"), 
-                                  bg="#e8f5e8", fg="#2d5a2d", relief="groove", bd=2)
+                                  bg="#121212", fg="#a5d6a7", relief="groove", bd=2)
         file_frame.pack(fill="x", pady=(0,15))
         
-        file_row = tk.Frame(file_frame, bg="#e8f5e8")
+        file_row = tk.Frame(file_frame, bg="#121212")
         file_row.pack(fill="x", padx=15, pady=15)
         
         self.entry_file = tk.Entry(file_row, width=70, font=("Arial", 9))
-        self.entry_file.insert(0, "facebook_groups_comments_FIXED.xlsx")
+        current_date = datetime.now().strftime("%d/%m/%Y")
+        self.entry_file.insert(0, f"facebook_groups_comments_FIXED_{current_date}.xlsx")
         self.entry_file.pack(side="left", fill="x", expand=True)
         
-        tk.Button(file_row, text="📁 Chọn", command=self.choose_file, 
-                 bg="#17a2b8", fg="white", font=("Arial", 9)).pack(side="right", padx=(10,0))
+        self.btn_choose = tk.Button(file_row, text="📁 Chọn", command=self.choose_file, 
+                 bg="#17a2b8", fg="black", font=("Arial", 9))
+        self.btn_choose.pack(side="right", padx=(10,0))
 
         # Status section
         status_frame = tk.LabelFrame(main_frame, text="📊 Trạng thái thực thi - FIXED", font=("Arial", 12, "bold"), 
-                                    bg="#e8f5e8", fg="#2d5a2d", relief="groove", bd=2)
+                                    bg="#121212", fg="#a5d6a7", relief="groove", bd=2)
         status_frame.pack(fill="x", pady=(0,15))
         
         self.lbl_status = tk.Label(status_frame, text="✅ FIXED scraper sẵn sàng - Đã fix lỗi username extraction", fg="#28a745", 
-                                  wraplength=900, justify="left", font=("Arial", 11), bg="#e8f5e8")
+                                  wraplength=900, justify="left", font=("Arial", 11), bg="#121212")
         self.lbl_status.pack(anchor="w", padx=15, pady=(15,5))
 
         self.lbl_progress_detail = tk.Label(status_frame, text="💡 FIXED features: 1) Better link analysis, 2) Enhanced debugging output, 3) Multiple extraction fallbacks, 4) Debug file generation",
-                                          fg="#6c757d", wraplength=900, justify="left", font=("Arial", 9), bg="#e8f5e8")
+                                          fg="#b0b0b0", wraplength=900, justify="left", font=("Arial", 9), bg="#121212")
         self.lbl_progress_detail.pack(anchor="w", padx=15, pady=(0,10))
 
         # Progress bar
@@ -843,27 +1058,150 @@ class FBGroupsAppGUI:
         self.progress_bar.pack(fill="x", padx=15, pady=(0,15))
 
         # Control buttons
-        button_frame = tk.Frame(main_frame, bg="#e8f5e8")
+        button_frame = tk.Frame(main_frame, bg="#121212")
         button_frame.pack(fill="x", pady=20)
         
-        self.btn_start = tk.Button(button_frame, text="🚀 Bắt đầu FIXED Scraping", bg="#28a745", fg="white", 
+        self.btn_start = tk.Button(button_frame, text="🚀 Bắt đầu FIXED Scraping", bg="#28a745", fg="black", 
                                   font=("Arial", 14, "bold"), command=self.start_scrape_thread, 
                                   pady=12, padx=40)
         self.btn_start.pack(side="left")
 
-        self.btn_stop = tk.Button(button_frame, text="⏹️ Dừng", bg="#dc3545", fg="white", 
+        self.btn_stop = tk.Button(button_frame, text="⏹️ Dừng", bg="#dc3545", fg="black", 
                                  font=("Arial", 14, "bold"), command=self.stop_scrape, 
                                  state=tk.DISABLED, pady=12, padx=40)
         self.btn_stop.pack(side="left", padx=(25,0))
 
         self.progress_var = tk.IntVar(value=0)
         self.progress_label = tk.Label(button_frame, textvariable=self.progress_var, fg="#28a745", 
-                                     font=("Arial", 18, "bold"), bg="#e8f5e8")
+                                     font=("Arial", 18, "bold"), bg="#121212")
         self.progress_label.pack(side="right")
 
         self._scrape_thread = None
         self._stop_flag = False
         self.scraper = None
+
+        # Apply dark theme across widgets
+        self._apply_dark_theme()
+
+        # Beautify primary (start) and danger (stop) buttons
+        self._beautify_button(self.btn_start, base_bg="#2ecc71", hover_bg="#27ae60", active_bg="#1e874b")
+        self._beautify_button(self.btn_stop, base_bg="#e74c3c", hover_bg="#c0392b", active_bg="#992d22")
+        # Beautify choose file button with cyan palette
+        self._beautify_button(self.btn_choose, base_bg="#17a2b8", hover_bg="#1491a1", active_bg="#0f6f7b")
+
+    def _apply_dark_theme(self):
+        """Apply a dark theme recursively to Tk widgets and ttk components."""
+        dark_bg = "#121212"
+        surface_bg = "#1e1e1e"
+        light_fg = "#e0e0e0"
+        subtle_fg = "#b0b0b0"
+
+        # Root background
+        try:
+            self.root.configure(bg=dark_bg)
+        except Exception:
+            pass
+
+        def apply(widget):
+            # Background
+            try:
+                if 'background' in widget.configure():
+                    widget.configure(bg=dark_bg)
+            except Exception:
+                pass
+
+            # Foreground: only adjust if currently black/dark default
+            try:
+                # Skip changing foreground for clickable buttons so custom styles persist
+                if isinstance(widget, tk.Button):
+                    pass
+                else:
+                    cfg = widget.configure()
+                    if 'foreground' in cfg:
+                        current_fg = str(widget.cget('fg')).lower()
+                        if current_fg in ('black', '#000000'):
+                            widget.configure(fg=light_fg)
+            except Exception:
+                pass
+
+            # Special cases
+            try:
+                if isinstance(widget, tk.Entry):
+                    widget.configure(bg=surface_bg, fg=light_fg, insertbackground=light_fg)
+                if isinstance(widget, tk.Text):
+                    widget.configure(bg=surface_bg, fg=light_fg, insertbackground=light_fg)
+                if isinstance(widget, tk.Listbox):
+                    widget.configure(bg=surface_bg, fg=light_fg, selectbackground="#2a2a2a")
+            except Exception:
+                pass
+
+            for child in widget.winfo_children():
+                apply(child)
+
+        apply(self.root)
+
+        # ttk styling (progress bar)
+        try:
+            style = ttk.Style()
+            # Use a theme that allows color customization
+            try:
+                style.theme_use('clam')
+            except Exception:
+                pass
+            style.configure("TProgressbar",
+                            troughcolor=surface_bg,
+                            background="#00bcd4",
+                            bordercolor=surface_bg,
+                            lightcolor=surface_bg,
+                            darkcolor=surface_bg)
+        except Exception:
+            pass
+
+    def _beautify_button(self, button, base_bg="#2ecc71", hover_bg="#27ae60", active_bg="#1e874b"):
+        """Apply modern flat styling and hover/active effects to tk.Button."""
+        try:
+            button.configure(
+                bg=base_bg,
+                fg="#000000",
+                activebackground=active_bg,
+                activeforeground="#000000",
+                bd=0,
+                highlightthickness=0,
+                relief="flat",
+                cursor="hand2",
+                disabledforeground="#777777"
+            )
+
+            def on_enter(_):
+                try:
+                    button.configure(bg=hover_bg)
+                except Exception:
+                    pass
+
+            def on_leave(_):
+                try:
+                    button.configure(bg=base_bg)
+                except Exception:
+                    pass
+
+            def on_press(_):
+                try:
+                    button.configure(bg=active_bg)
+                except Exception:
+                    pass
+
+            def on_release(_):
+                try:
+                    button.configure(bg=hover_bg)
+                except Exception:
+                    pass
+
+            button.bind("<Enter>", on_enter)
+            button.bind("<Leave>", on_leave)
+            button.bind("<ButtonPress-1>", on_press)
+            button.bind("<ButtonRelease-1>", on_release)
+        except Exception:
+            pass
 
     def choose_file(self):
         f = filedialog.asksaveasfilename(
@@ -952,6 +1290,8 @@ class FBGroupsAppGUI:
             comments = self.scraper.scrape_all_comments(limit=limit, resolve_uid=resolve_uid, 
                                                        progress_callback=self._progress_cb)
             
+            print(f"✅ Comments: {comments}")
+
             if self._stop_flag: return
             
             # Save

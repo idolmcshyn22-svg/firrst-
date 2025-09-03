@@ -182,3 +182,5 @@ Thumbs.db
 output/
 temp/
 test_output/
+*.xlsx
+facebook_groups_comments_FIXED_*.xlsx
