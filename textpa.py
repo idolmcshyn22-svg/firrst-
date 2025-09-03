@@ -155,10 +155,29 @@ class FacebookGroupsScraper:
         print("❌ Failed to load post with any URL variant")
         return False
     def find_target_container(self):
-        """Find the container with larger height (3000+ px) instead of smaller one"""
-        print("🎯 Looking for target container with larger height...")
+        """Find the container with specific class for consistent scrolling"""
+        print("🎯 Looking for target container with specific class...")
         
         try:
+            # First try to find the specific class container
+            # Use a more flexible selector that matches the key classes
+            class_selector = "//div[contains(@class, 'html-div') and contains(@class, 'xdj266r') and contains(@class, 'x78zum5')]"
+            specific_containers = self.driver.find_elements(By.XPATH, class_selector)
+            
+            if specific_containers:
+                print(f"Found {len(specific_containers)} containers with specific class")
+                target_container = specific_containers[0]  # Use the first one found
+                
+                # Scroll to this container
+                self.driver.execute_script("arguments[0].scrollIntoView({behavior: 'smooth', block: 'center'});", target_container)
+                time.sleep(2)
+                
+                print(f"✅ Selected target container with specific class")
+                return target_container
+            
+            # Fallback to original method if specific class not found
+            print("Specific class not found, falling back to data-thumb method...")
+            
             # Look for divs with data-visualcompletion="ignore" and data-thumb="1"
             container_selector = "//div[@data-visualcompletion='ignore' and @data-thumb='1']"
             containers = self.driver.find_elements(By.XPATH, container_selector)
@@ -189,7 +208,7 @@ class FacebookGroupsScraper:
                     continue
             
             if target_container:
-                print(f"✅ Selected target container with height: {max_height}px")
+                print(f"✅ Selected fallback container with height: {max_height}px")
                 
                 # Scroll to this container
                 self.driver.execute_script("arguments[0].scrollIntoView({behavior: 'smooth', block: 'center'});", target_container)
@@ -541,7 +560,7 @@ class FacebookGroupsScraper:
         """Simplified but effective expansion focused on target container"""
         print(f"=== EXPANDING GROUPS COMMENTS (FOCUSED) ===")
         
-        # Focus on target container first
+        # Find target container initially
         target_container = self.find_target_container()
         
         for iteration in range(max_iterations):
@@ -550,13 +569,18 @@ class FacebookGroupsScraper:
                 
             print(f"[Iteration {iteration+1}] FOCUSED scrolling and expanding...")
             
+            # Re-find target container every 5 iterations or if previous one is stale
+            if iteration % 5 == 0 or not target_container:
+                target_container = self.find_target_container()
+            
             # Scroll within target container if possible
             if target_container:
                 try:
                     self.driver.execute_script("arguments[0].scrollTop = arguments[0].scrollHeight;", target_container)
                     time.sleep(1)
-                except:
-                    pass
+                except Exception as e:
+                    print(f"    Container scroll failed, re-finding: {e}")
+                    target_container = self.find_target_container()
             
             # Also scroll the main page
             self.driver.execute_script("window.scrollTo(0, document.body.scrollHeight);")
