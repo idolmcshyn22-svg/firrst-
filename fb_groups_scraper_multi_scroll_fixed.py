@@ -985,31 +985,81 @@ class FacebookGroupsScraper:
                         print(f"      Error processing link {link_index+1}: {e}")
                         continue
                 
-                # FIXED: Also look for time links (PostLink source)
+                # FIXED: Enhanced time link detection with better patterns
                 time_links = []
+                
+                print(f"    🕐 FIXED: Searching for time links in {len(all_links)} total links...")
                 
                 for link_index, link in enumerate(all_links):
                     try:
                         link_text = link.text.strip()
                         link_href = link.get_attribute("href") or ""
                         
-                        # FIXED: Detect time links (like "1 ngày", "2 hours", etc.)
-                        is_time_link = (link_text and 
-                                      ('facebook.com' in link_href) and
-                                      ('comment_id=' in link_href) and
-                                      (re.match(r'^\d+\s*(ngày|giờ|phút|giây|day|hour|min|sec|h|m|d)', link_text.lower()) or
-                                       link_text.lower() in ['just now', 'vừa xong', 'now']))
+                        print(f"      Link {link_index+1}: Text='{link_text}' | Href={link_href[:60]}...")
                         
-                        if is_time_link:
+                        # FIXED: Enhanced time link detection patterns
+                        time_patterns = [
+                            r'^\d+\s*ngày',      # "1 ngày", "2 ngày"
+                            r'^\d+\s*giờ',       # "1 giờ", "2 giờ"  
+                            r'^\d+\s*phút',      # "1 phút", "30 phút"
+                            r'^\d+\s*giây',      # "1 giây", "45 giây"
+                            r'^\d+\s*day',       # "1 day", "2 days"
+                            r'^\d+\s*hour',      # "1 hour", "2 hours"
+                            r'^\d+\s*min',       # "1 min", "30 mins"
+                            r'^\d+\s*sec',       # "1 sec", "45 secs"
+                            r'^\d+\s*h$',        # "1h", "2h"
+                            r'^\d+\s*m$',        # "1m", "30m"
+                            r'^\d+\s*d$',        # "1d", "2d"
+                        ]
+                        
+                        # Check if text matches time patterns
+                        is_time_text = False
+                        if link_text:
+                            text_lower = link_text.lower().strip()
+                            
+                            # Check against patterns
+                            for pattern in time_patterns:
+                                if re.match(pattern, text_lower):
+                                    is_time_text = True
+                                    print(f"        ✅ Time pattern matched: '{pattern}' for '{text_lower}'")
+                                    break
+                            
+                            # Check special cases
+                            if not is_time_text and text_lower in ['just now', 'vừa xong', 'now', 'bây giờ']:
+                                is_time_text = True
+                                print(f"        ✅ Special time text: '{text_lower}'")
+                        
+                        # Check if href contains Facebook and comment_id
+                        is_facebook_comment_link = (link_href and 
+                                                   'facebook.com' in link_href and 
+                                                   'comment_id=' in link_href)
+                        
+                        print(f"        Time text: {is_time_text}, FB comment link: {is_facebook_comment_link}")
+                        
+                        # FIXED: Accept as time link if it has time text AND Facebook comment link
+                        if is_time_text and is_facebook_comment_link:
                             time_links.append({
                                 'text': link_text,
                                 'href': link_href,
                                 'index': link_index
                             })
-                            print(f"      🕐 FIXED: Found time link: '{link_text}' -> {link_href[:80]}...")
+                            print(f"        🎯 FIXED: Added time link: '{link_text}' -> {link_href[:80]}...")
+                        
+                        # FIXED: Also accept links that look like Facebook comment links even without perfect time text
+                        elif (link_href and 'facebook.com' in link_href and 'comment_id=' in link_href and 
+                              link_text and len(link_text) < 20 and not any(char in link_text.lower() for char in ['like', 'reply', 'share'])):
+                            time_links.append({
+                                'text': link_text,
+                                'href': link_href,
+                                'index': link_index
+                            })
+                            print(f"        🎯 FIXED: Added potential time link: '{link_text}' -> {link_href[:80]}...")
                             
                     except Exception as e:
+                        print(f"        ❌ Error processing link {link_index+1}: {e}")
                         continue
+                
+                print(f"    📊 FIXED: Found {len(time_links)} time links total")
                 
                 # FIXED: Select the best profile link based on priority
                 if potential_profile_links:
@@ -1023,17 +1073,42 @@ class FacebookGroupsScraper:
                     
                     print(f"      🎯 FIXED: Selected best profile: {username} (priority: {best_link['priority']}) -> UID: {uid}")
                 
-                # FIXED: Get PostLink from time link if available
+                # FIXED: Get PostLink from time link with enhanced selection
                 comment_post_link = ""
                 if time_links:
-                    # Use the first time link found
-                    time_link = time_links[0]
-                    comment_post_link = time_link['href']
-                    print(f"      🔗 FIXED: Found comment PostLink: {comment_post_link[:80]}...")
+                    # FIXED: Select the best time link (prefer ones with clear time text)
+                    best_time_link = None
+                    
+                    for time_link in time_links:
+                        link_text = time_link['text'].lower().strip()
+                        
+                        # Priority 1: Clear time patterns
+                        if re.match(r'^\d+\s*(ngày|giờ|phút|day|hour|min)', link_text):
+                            best_time_link = time_link
+                            print(f"      🎯 FIXED: Selected priority time link: '{time_link['text']}'")
+                            break
+                        
+                        # Priority 2: Any time-like text
+                        elif not best_time_link:
+                            best_time_link = time_link
+                    
+                    if best_time_link:
+                        comment_post_link = best_time_link['href']
+                        
+                        # FIXED: Clean up the URL (remove HTML entities)
+                        comment_post_link = comment_post_link.replace('&amp;', '&')
+                        
+                        print(f"      🔗 FIXED: Extracted PostLink from time link '{best_time_link['text']}':")
+                        print(f"          {comment_post_link[:100]}...")
+                    else:
+                        print(f"      ⚠️ Time links found but none selected")
                 else:
-                    # Fallback: generate PostLink from current post info
+                    print(f"      ⚠️ No time links found in this comment")
+                
+                # FIXED: Fallback if no time link PostLink found
+                if not comment_post_link:
                     comment_post_link = self.generate_post_link(uid, username)
-                    print(f"      🔗 FIXED: Generated fallback PostLink: {comment_post_link[:80]}...")
+                    print(f"      🔗 FIXED: Using generated fallback PostLink: {comment_post_link[:80]}...")
                 
             except Exception as e:
                 print(f"    Error in FIXED method: {e}")
