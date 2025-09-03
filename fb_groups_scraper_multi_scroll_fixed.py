@@ -985,6 +985,32 @@ class FacebookGroupsScraper:
                         print(f"      Error processing link {link_index+1}: {e}")
                         continue
                 
+                # FIXED: Also look for time links (PostLink source)
+                time_links = []
+                
+                for link_index, link in enumerate(all_links):
+                    try:
+                        link_text = link.text.strip()
+                        link_href = link.get_attribute("href") or ""
+                        
+                        # FIXED: Detect time links (like "1 ngày", "2 hours", etc.)
+                        is_time_link = (link_text and 
+                                      ('facebook.com' in link_href) and
+                                      ('comment_id=' in link_href) and
+                                      (re.match(r'^\d+\s*(ngày|giờ|phút|giây|day|hour|min|sec|h|m|d)', link_text.lower()) or
+                                       link_text.lower() in ['just now', 'vừa xong', 'now']))
+                        
+                        if is_time_link:
+                            time_links.append({
+                                'text': link_text,
+                                'href': link_href,
+                                'index': link_index
+                            })
+                            print(f"      🕐 FIXED: Found time link: '{link_text}' -> {link_href[:80]}...")
+                            
+                    except Exception as e:
+                        continue
+                
                 # FIXED: Select the best profile link based on priority
                 if potential_profile_links:
                     # Sort by priority (highest first)
@@ -997,6 +1023,18 @@ class FacebookGroupsScraper:
                     
                     print(f"      🎯 FIXED: Selected best profile: {username} (priority: {best_link['priority']}) -> UID: {uid}")
                 
+                # FIXED: Get PostLink from time link if available
+                comment_post_link = ""
+                if time_links:
+                    # Use the first time link found
+                    time_link = time_links[0]
+                    comment_post_link = time_link['href']
+                    print(f"      🔗 FIXED: Found comment PostLink: {comment_post_link[:80]}...")
+                else:
+                    # Fallback: generate PostLink from current post info
+                    comment_post_link = self.generate_post_link(uid, username)
+                    print(f"      🔗 FIXED: Generated fallback PostLink: {comment_post_link[:80]}...")
+                
             except Exception as e:
                 print(f"    Error in FIXED method: {e}")
             
@@ -1007,18 +1045,19 @@ class FacebookGroupsScraper:
                 
             print(f"  ✅ FIXED: Successfully extracted username: {username}")
             
-            # FIXED: Generate link to the original post (not user's posts)
-            post_link = self.generate_post_link(uid, username)
+            # FIXED: Use PostLink from time link if available, otherwise generate
+            final_post_link = comment_post_link if comment_post_link else self.generate_post_link(uid, username)
             
             return {
                 "UID": uid,
                 "Name": username,
                 "ProfileLink": profile_href,  # Keep original profile link
-                "PostLink": post_link,        # FIXED: Link to the original Groups post
+                "PostLink": final_post_link,  # FIXED: PostLink from time link or generated
                 "CommentLink": "",
                 "ElementIndex": index,
                 "TextPreview": full_text[:100] + "..." if len(full_text) > 100 else full_text,
-                "ContainerHeight": "Multi-Container Scroll FIXED"
+                "ContainerHeight": "Multi-Container Scroll FIXED",
+                "PostLinkSource": "TimeLink" if comment_post_link else "Generated"
             }
             
         except Exception as e:
