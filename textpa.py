@@ -154,6 +154,25 @@ class FacebookGroupsScraper:
         
         print("❌ Failed to load post with any URL variant")
         return False
+
+    def clear_page_cache(self):
+        """Clear page cache and force reload to ensure fresh DOM"""
+        try:
+            print("🧹 Clearing page cache...")
+            
+            # Clear browser cache
+            self.driver.execute_script("window.localStorage.clear();")
+            self.driver.execute_script("window.sessionStorage.clear();")
+            
+            # Force page refresh
+            self.driver.refresh()
+            time.sleep(5)  # Wait for fresh load
+            
+            print("✅ Page cache cleared and refreshed")
+            
+        except Exception as e:
+            print(f"⚠️ Error clearing cache: {e}")
+
     def find_target_container(self):
         """Find the container with larger height (3000+ px) instead of smaller one"""
         print("🎯 Looking for target container with larger height...")
@@ -167,7 +186,7 @@ class FacebookGroupsScraper:
             
             target_container = None
             max_height = 0
-            
+
             for i, container in enumerate(containers):
                 try:
                     # Get style attribute
@@ -187,9 +206,9 @@ class FacebookGroupsScraper:
                 except Exception as e:
                     print(f"  Error analyzing container {i+1}: {e}")
                     continue
-            
+
             if target_container:
-                print(f"✅ Selected target container with height: {max_height}px")
+                print(f"✅ Selected container with height: {max_height}px")
                 
                 # Scroll to this container
                 self.driver.execute_script("arguments[0].scrollIntoView({behavior: 'smooth', block: 'center'});", target_container)
@@ -199,10 +218,107 @@ class FacebookGroupsScraper:
             else:
                 print("⚠️ No suitable container found, using document body")
                 return self.driver.find_element(By.TAG_NAME, "body")
-                
+
         except Exception as e:
             print(f"Error finding target container: {e}")
-            return None
+            return self.driver.find_element(By.TAG_NAME, "body")
+
+    def scroll_to_target_container(self):
+        """Find target container and scroll to it - THIS WAS THE MISSING METHOD"""
+        print("🎯 Finding and scrolling to target container...")
+        
+        # Find the target container
+        target_container = self.find_target_container()
+        
+        if target_container:
+            # Scroll through the comments in this container
+            success = self.scroll_through_comments_container(target_container)
+            if success:
+                print("✅ Successfully scrolled through target container")
+            else:
+                print("⚠️ Had issues scrolling, but continuing with container")
+        
+        return target_container
+
+    def scroll_through_comments_container(self, target_container):
+        """Scroll gradually through the comments container to load all content"""
+        print("📜 Starting gradual scroll through comments container...")
+        
+        try:
+            if not target_container:
+                print("❌ No target container provided")
+                return False
+            
+            # Get container height
+            style = target_container.get_attribute('style') or ""
+            height_match = re.search(r'height:\s*(\d+)px', style)
+            
+            if not height_match:
+                print("⚠️ Could not determine container height")
+                return False
+            
+            container_height = int(height_match.group(1))
+            print(f"📐 Container height: {container_height}px")
+            
+            # Get container position
+            container_rect = target_container.rect
+            container_top = container_rect['y']
+            
+            print(f"📍 Container position: top={container_top}px")
+            
+            # Scroll parameters
+            scroll_step = 600  # Smaller steps for better loading
+            scroll_pause = 2   # Longer pause to ensure loading
+            current_position = container_top
+            
+            # Start from the top of container
+            self.driver.execute_script(f"window.scrollTo(0, {container_top});")
+            time.sleep(3)
+            
+            print("🚀 Starting gradual scroll through comments...")
+            
+            step_count = 0
+            max_steps = (container_height // scroll_step) + 3  # +3 for safety
+            
+            while step_count < max_steps:
+                step_count += 1
+                current_position += scroll_step
+                
+                # Scroll to next position
+                self.driver.execute_script(f"window.scrollTo(0, {current_position});")
+                
+                # Check current scroll position
+                current_scroll = self.driver.execute_script("return window.pageYOffset;")
+                page_height = self.driver.execute_script("return document.body.scrollHeight;")
+                
+                print(f"📜 Step {step_count}/{max_steps}: scrolled to {current_scroll}px")
+                
+                # Wait for content to load
+                time.sleep(scroll_pause)
+                
+                # Check if we've scrolled past the container or reached page bottom
+                if current_scroll >= (container_top + container_height - 300):
+                    print("🏁 Reached end of comments container")
+                    break
+                    
+                if current_scroll >= (page_height - 1000):
+                    print("🏁 Reached page bottom")
+                    break
+            
+            print(f"✅ Completed comment scrolling in {step_count} steps")
+            
+            # Final scroll to make sure we're at the bottom of container
+            final_position = min(container_top + container_height, 
+                            self.driver.execute_script("return document.body.scrollHeight;") - 500)
+            self.driver.execute_script(f"window.scrollTo(0, {final_position});")
+            time.sleep(3)
+            
+            print("🎯 Final positioning completed")
+            return True
+            
+        except Exception as e:
+            print(f"❌ Error during comment scrolling: {e}")
+            return False
 
     def _switch_to_all_comments(self):
         """Switch to 'All comments' view to get more comments"""
@@ -284,7 +400,7 @@ class FacebookGroupsScraper:
         print(f"=== EXTRACTING GROUPS COMMENTS (FOCUSED) ===")
         
         # Find and focus on the target container
-        target_container = self.find_target_container()
+        target_container = self.scroll_to_target_container()
         
         if not target_container:
             print("❌ Could not find target container")
@@ -602,7 +718,6 @@ class FacebookGroupsScraper:
                 break
         
         print("=== FOCUSED EXPANSION COMPLETE ===")
-
     def scrape_all_comments(self, limit=0, resolve_uid=True, progress_callback=None):
         """Main scraping orchestrator with FOCUSED approach"""
         print(f"=== STARTING FOCUSED GROUPS SCRAPING ===")
@@ -618,7 +733,7 @@ class FacebookGroupsScraper:
         
         # Step 3: Apply limit
         if limit > 0:
-            comments = comments[:limit]
+            comments = comments
         
         # Step 4: Progress reporting
         if progress_callback:
