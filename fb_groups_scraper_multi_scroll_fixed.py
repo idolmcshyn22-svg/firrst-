@@ -54,6 +54,10 @@ def clean_text(text):
 
 class FacebookGroupsScraper:
     def __init__(self, cookie_str, headless=True):
+        # FIXED: Store current post info for PostLink generation
+        self.current_post_url = ""
+        self.current_group_id = ""
+        self.current_post_id = ""
         options = Options()
         if headless:
             options.add_argument("--headless=new")
@@ -101,6 +105,10 @@ class FacebookGroupsScraper:
 
     def load_post(self, post_url):
         print(f"Loading groups post: {post_url}")
+        
+        # FIXED: Extract post info for PostLink generation
+        self.current_post_url = post_url
+        self._extract_post_info(post_url)
         
         urls_to_try = []
         
@@ -155,17 +163,70 @@ class FacebookGroupsScraper:
         print("❌ Failed to load post with any URL variant")
         return False
 
+    def _extract_post_info(self, post_url):
+        """FIXED: Extract group and post IDs for PostLink generation"""
+        try:
+            print(f"🔍 FIXED: Extracting post info from URL: {post_url}")
+            
+            # Extract group ID and post ID from URL
+            # Format: https://www.facebook.com/groups/GROUP_ID/posts/POST_ID
+            group_match = re.search(r'/groups/([^/]+)/', post_url)
+            post_match = re.search(r'/posts/(\d+)', post_url)
+            
+            if group_match:
+                self.current_group_id = group_match.group(1)
+                print(f"📊 Extracted Group ID: {self.current_group_id}")
+            
+            if post_match:
+                self.current_post_id = post_match.group(1)
+                print(f"📊 Extracted Post ID: {self.current_post_id}")
+            
+            # Alternative: extract from comment_id parameter
+            comment_id_match = re.search(r'comment_id=(\d+)', post_url)
+            if comment_id_match:
+                comment_id = comment_id_match.group(1)
+                print(f"📊 Found comment ID: {comment_id}")
+                
+        except Exception as e:
+            print(f"⚠️ Error extracting post info: {e}")
+
+    def generate_user_post_link(self, user_id, username=""):
+        """FIXED: Generate user's post link in the current group"""
+        try:
+            if not self.current_group_id or not user_id or user_id == "Unknown":
+                return ""
+            
+            # FIXED: Generate user's posts link in this group
+            # Format: https://www.facebook.com/groups/GROUP_ID/user/USER_ID
+            user_post_link = f"https://www.facebook.com/groups/{self.current_group_id}/user/{user_id}"
+            
+            print(f"🔗 FIXED: Generated user post link: {user_post_link}")
+            return user_post_link
+            
+        except Exception as e:
+            print(f"❌ Error generating user post link: {e}")
+            return ""
+
     def scroll_to_load_all_comments(self):
         """FIXED: Scroll through ALL comments containers to load all content"""
         print("📜 FIXED: Starting scroll for ALL comments containers...")
         
         try:
-            # FIXED: Find ALL containers that need scrolling
+            # FIXED: Find ALL containers that need scrolling (including new container type)
             container_selectors = [
-                # Primary: Your specific container
+                # Primary: Your original specific container
                 "//div[@class='x14nfmen x1s85apg x5yr21d xtijo5x xg01cxk x10l6tqk x13vifvy x1wsgiic x19991ni xwji4o3 x1kky2od x1sd63oq' and @data-visualcompletion='ignore' and @data-thumb='1']",
+                
+                # FIXED: Your new container type
+                "//div[@class='x9f619 x1s85apg xtijo5x xg01cxk xexx8yu x18d9i69 x135b78x x11lfxj5 x47corl x10l6tqk x13vifvy x1n4smgl x1d8287x x19991ni xwji4o3 x1kky2od' and @data-visualcompletion='ignore' and @data-thumb='1']",
+                
+                # Fallback: Partial class matches for both types
+                "//div[contains(@class, 'x14nfmen') and contains(@class, 'x1s85apg') and @data-thumb='1']",
+                "//div[contains(@class, 'x9f619') and contains(@class, 'x1s85apg') and @data-thumb='1']",
+                
                 # Secondary: Any container with data-thumb="1" and significant height
                 "//div[@data-visualcompletion='ignore' and @data-thumb='1']",
+                
                 # Tertiary: Any scrollable container with data-thumb
                 "//div[@data-thumb='1']"
             ]
@@ -301,6 +362,15 @@ class FacebookGroupsScraper:
         print(f"  🎯 FIXED: Scrolling individual container (height: {height}px)...")
         
         try:
+            # FIXED: Check for transform/scale containers (like your new container)
+            container_style = container.get_attribute('style') or ""
+            has_transform = 'transform:' in container_style or 'matrix3d' in container_style
+            has_scale = 'scale(' in container_style
+            
+            if has_transform or has_scale:
+                print(f"    🎯 FIXED: Detected transform/scale container, using special scroll logic...")
+                return self.scroll_transform_container(container, height, container_style)
+            
             # Get container scroll properties
             scroll_height = self.driver.execute_script("return arguments[0].scrollHeight;", container)
             client_height = self.driver.execute_script("return arguments[0].clientHeight;", container)
@@ -346,6 +416,83 @@ class FacebookGroupsScraper:
             
         except Exception as e:
             print(f"    ❌ Error in individual container scroll: {e}")
+            return False
+
+    def scroll_transform_container(self, container, height, container_style):
+        """FIXED: Special scroll logic for containers with transform/scale"""
+        print(f"  🎯 FIXED: Scrolling transform/scale container...")
+        
+        try:
+            print(f"    📊 Container style: {container_style[:100]}...")
+            
+            # FIXED: For transform containers, focus on main window scroll
+            # These containers are often visual overlays that don't scroll directly
+            
+            # Get container position
+            rect = container.rect
+            container_top = rect['y']
+            container_height = rect['height']
+            container_bottom = container_top + container_height
+            
+            print(f"    📍 Transform container bounds: {container_top}px to {container_bottom}px (height: {container_height}px)")
+            
+            # FIXED: Intensive scroll sequence for transform containers
+            scroll_attempts = []
+            
+            # Generate intensive scroll positions
+            current_pos = max(0, container_top - 500)
+            while current_pos <= container_bottom + 1000:
+                scroll_attempts.append(current_pos)
+                current_pos += 200  # Smaller increments for transform containers
+            
+            # Add page bottom
+            page_height = self.driver.execute_script("return document.body.scrollHeight;")
+            scroll_attempts.append(page_height)
+            
+            print(f"    📜 Generated {len(scroll_attempts)} intensive scroll positions")
+            
+            # FIXED: Execute intensive scroll sequence
+            for i, scroll_pos in enumerate(scroll_attempts):
+                if self._stop_flag:
+                    break
+                    
+                print(f"    📜 Transform scroll {i+1}/{len(scroll_attempts)}: {scroll_pos}px")
+                
+                # Scroll to position
+                self.driver.execute_script(f"window.scrollTo(0, {scroll_pos});")
+                time.sleep(2.5)  # Longer wait for transform containers
+                
+                # Check for page expansion
+                new_page_height = self.driver.execute_script("return document.body.scrollHeight;")
+                if new_page_height > page_height + 100:
+                    print(f"      🎯 Transform scroll triggered content: {page_height}px -> {new_page_height}px")
+                    page_height = new_page_height
+                    # Add new positions
+                    additional_positions = range(scroll_pos + 200, new_page_height + 200, 200)
+                    scroll_attempts.extend(additional_positions)
+            
+            # FIXED: Final bottom verification for transform containers
+            print(f"    🔄 Final verification for transform container...")
+            
+            for final_attempt in range(15):  # More attempts for transform containers
+                self.driver.execute_script("window.scrollTo(0, document.body.scrollHeight);")
+                time.sleep(3)
+                
+                current_scroll = self.driver.execute_script("return window.pageYOffset;")
+                current_height = self.driver.execute_script("return document.body.scrollHeight;")
+                window_height = self.driver.execute_script("return window.innerHeight;")
+                
+                print(f"      Transform final {final_attempt+1}/15: scroll={current_scroll}px, height={current_height}px")
+                
+                if current_scroll >= current_height - window_height - 20:
+                    print(f"      ✅ Transform container: confirmed at bottom")
+                    break
+            
+            print(f"    ✅ Transform container scroll completed")
+            return True
+            
+        except Exception as e:
+            print(f"    ❌ Error scrolling transform container: {e}")
             return False
 
     def scroll_window_for_container(self, container, height, top):
@@ -696,8 +843,8 @@ class FacebookGroupsScraper:
                     print("  ✗ Skipped: no username found")
                     continue
                     
-                # Check for duplicates
-                content_signature = f"{comment_data['Name']}_{comment_data['ProfileLink']}"
+                # Check for duplicates using PostLink
+                content_signature = f"{comment_data['Name']}_{comment_data['PostLink']}"
                 if content_signature in seen_content:
                     print("  ✗ Skipped: duplicate user")
                     continue
@@ -708,7 +855,7 @@ class FacebookGroupsScraper:
                 comment_data['Source'] = 'Multi-Container Scroll (FIXED)'
                 
                 comments.append(comment_data)
-                print(f"  ✅ Added: {comment_data['Name']} - Profile: {comment_data['ProfileLink'][:50]}...")
+                print(f"  ✅ Added: {comment_data['Name']} - PostLink: {comment_data['PostLink'][:70]}...")
                 
             except Exception as e:
                 print(f"  Error processing element {i}: {e}")
@@ -846,10 +993,14 @@ class FacebookGroupsScraper:
                 
             print(f"  ✅ FIXED: Successfully extracted username: {username}")
             
+            # FIXED: Generate user's post link in this group instead of profile link
+            user_post_link = self.generate_user_post_link(uid, username)
+            
             return {
                 "UID": uid,
                 "Name": username,
-                "ProfileLink": profile_href,
+                "ProfileLink": profile_href,  # Keep original profile link
+                "PostLink": user_post_link,   # FIXED: Add user's posts in this group
                 "CommentLink": "",
                 "ElementIndex": index,
                 "TextPreview": full_text[:100] + "..." if len(full_text) > 100 else full_text,
