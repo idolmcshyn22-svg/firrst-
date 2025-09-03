@@ -190,21 +190,21 @@ class FacebookGroupsScraper:
         except Exception as e:
             print(f"⚠️ Error extracting post info: {e}")
 
-    def generate_user_post_link(self, user_id, username=""):
-        """FIXED: Generate user's post link in the current group"""
+    def generate_post_link(self, user_id="", username=""):
+        """FIXED: Generate link to the original post (not user's posts)"""
         try:
-            if not self.current_group_id or not user_id or user_id == "Unknown":
+            if not self.current_group_id or not self.current_post_id:
                 return ""
             
-            # FIXED: Generate user's posts link in this group
-            # Format: https://www.facebook.com/groups/GROUP_ID/user/USER_ID
-            user_post_link = f"https://www.facebook.com/groups/{self.current_group_id}/user/{user_id}"
+            # FIXED: Generate link to the original Groups post
+            # Format: https://www.facebook.com/groups/GROUP_ID/posts/POST_ID/
+            post_link = f"https://www.facebook.com/groups/{self.current_group_id}/posts/{self.current_post_id}/"
             
-            print(f"🔗 FIXED: Generated user post link: {user_post_link}")
-            return user_post_link
+            print(f"🔗 FIXED: Generated post link: {post_link}")
+            return post_link
             
         except Exception as e:
-            print(f"❌ Error generating user post link: {e}")
+            print(f"❌ Error generating post link: {e}")
             return ""
 
     def scroll_to_load_all_comments(self):
@@ -993,14 +993,14 @@ class FacebookGroupsScraper:
                 
             print(f"  ✅ FIXED: Successfully extracted username: {username}")
             
-            # FIXED: Generate user's post link in this group instead of profile link
-            user_post_link = self.generate_user_post_link(uid, username)
+            # FIXED: Generate link to the original post (not user's posts)
+            post_link = self.generate_post_link(uid, username)
             
             return {
                 "UID": uid,
                 "Name": username,
                 "ProfileLink": profile_href,  # Keep original profile link
-                "PostLink": user_post_link,   # FIXED: Add user's posts in this group
+                "PostLink": post_link,        # FIXED: Link to the original Groups post
                 "CommentLink": "",
                 "ElementIndex": index,
                 "TextPreview": full_text[:100] + "..." if len(full_text) > 100 else full_text,
