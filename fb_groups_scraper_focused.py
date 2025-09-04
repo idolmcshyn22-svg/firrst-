@@ -8,7 +8,7 @@ from selenium import webdriver
 from selenium.webdriver.common.by import By
 from selenium.webdriver.chrome.service import Service
 from selenium.webdriver.chrome.options import Options
-from selenium.common.exceptions import WebDriverException, NoSuchElementException
+from selenium.common.exceptions import WebDriverException, NoSuchElementException, StaleElementReferenceException
 from webdriver_manager.chrome import ChromeDriverManager
 from selenium.webdriver.support.ui import WebDriverWait
 from selenium.webdriver.support import expected_conditions as EC
@@ -115,6 +115,78 @@ def is_anonymous_user(username):
     
     print(f"    ✅ Valid username: '{username}'")
     return False
+
+def safe_get_element_text(element, max_retries=3):
+    """
+    Safely get text from element with retry mechanism for stale elements
+    Args:
+        element: Selenium WebElement
+        max_retries (int): Maximum number of retries
+    Returns:
+        str: Element text or empty string if failed
+    """
+    for attempt in range(max_retries):
+        try:
+            return element.text.strip()
+        except StaleElementReferenceException:
+            print(f"    ⚠️ Stale element on attempt {attempt + 1}, retrying...")
+            time.sleep(0.5)
+            continue
+        except Exception as e:
+            print(f"    ⚠️ Error getting element text: {e}")
+            return ""
+    
+    print(f"    ❌ Failed to get element text after {max_retries} attempts")
+    return ""
+
+def safe_get_element_attribute(element, attribute, max_retries=3):
+    """
+    Safely get attribute from element with retry mechanism for stale elements
+    Args:
+        element: Selenium WebElement
+        attribute (str): Attribute name
+        max_retries (int): Maximum number of retries
+    Returns:
+        str: Attribute value or empty string if failed
+    """
+    for attempt in range(max_retries):
+        try:
+            return element.get_attribute(attribute) or ""
+        except StaleElementReferenceException:
+            print(f"    ⚠️ Stale element on attempt {attempt + 1}, retrying...")
+            time.sleep(0.5)
+            continue
+        except Exception as e:
+            print(f"    ⚠️ Error getting element attribute: {e}")
+            return ""
+    
+    print(f"    ❌ Failed to get element attribute after {max_retries} attempts")
+    return ""
+
+def safe_find_elements(element, by, value, max_retries=3):
+    """
+    Safely find elements with retry mechanism for stale elements
+    Args:
+        element: Selenium WebElement
+        by: Locator strategy
+        value: Locator value
+        max_retries (int): Maximum number of retries
+    Returns:
+        list: List of WebElements or empty list if failed
+    """
+    for attempt in range(max_retries):
+        try:
+            return element.find_elements(by, value)
+        except StaleElementReferenceException:
+            print(f"    ⚠️ Stale element on attempt {attempt + 1}, retrying...")
+            time.sleep(0.5)
+            continue
+        except Exception as e:
+            print(f"    ⚠️ Error finding elements: {e}")
+            return []
+    
+    print(f"    ❌ Failed to find elements after {max_retries} attempts")
+    return []
 
 def extract_uid_from_profile_url(profile_url):
     """
@@ -616,51 +688,144 @@ class FacebookGroupsScraper:
             print(f"  ⚠️ Error switching to 'View more comments' view: {e}")
             print("  Proceeding with current view...")
 
+    def refresh_stale_elements(self, elements_list):
+        """
+        Refresh stale elements by re-finding them
+        Args:
+            elements_list (list): List of potentially stale elements
+        Returns:
+            list: List of refreshed elements
+        """
+        print("🔄 Refreshing potentially stale elements...")
+        refreshed_elements = []
+        
+        for i, element in enumerate(elements_list):
+            try:
+                # Test if element is stale
+                _ = element.tag_name
+                refreshed_elements.append(element)
+            except StaleElementReferenceException:
+                print(f"  ⚠️ Element {i+1} is stale, attempting to refresh...")
+                try:
+                    # Try to re-find element by its position and attributes
+                    location = element.location
+                    size = element.size
+                    
+                    # Find elements near the same location
+                    nearby_elements = self.driver.find_elements(By.XPATH, "//*")
+                    
+                    for candidate in nearby_elements:
+                        try:
+                            candidate_location = candidate.location
+                            candidate_size = candidate.size
+                            
+                            # Check if location and size match approximately
+                            if (abs(candidate_location['x'] - location['x']) < 10 and
+                                abs(candidate_location['y'] - location['y']) < 10 and
+                                abs(candidate_size['width'] - size['width']) < 50 and
+                                abs(candidate_size['height'] - size['height']) < 50):
+                                
+                                refreshed_elements.append(candidate)
+                                print(f"    ✅ Refreshed element {i+1}")
+                                break
+                        except:
+                            continue
+                    else:
+                        print(f"    ❌ Could not refresh element {i+1}")
+                        
+                except Exception as refresh_error:
+                    print(f"    ❌ Error refreshing element {i+1}: {refresh_error}")
+            except Exception as e:
+                print(f"  ⚠️ Error checking element {i+1}: {e}")
+                continue
+        
+        print(f"✅ Refreshed {len(refreshed_elements)}/{len(elements_list)} elements")
+        return refreshed_elements
+
+    def extract_with_retry(self, element, index, max_retries=2):
+        """
+        Extract comment data with retry mechanism for stale elements
+        Args:
+            element: Selenium WebElement
+            index (int): Element index
+            max_retries (int): Maximum retry attempts
+        Returns:
+            dict or None: Comment data or None if failed
+        """
+        for attempt in range(max_retries + 1):
+            try:
+                return self.extract_comment_data_focused(element, index)
+            except StaleElementReferenceException:
+                if attempt < max_retries:
+                    print(f"    ⚠️ Stale element on attempt {attempt + 1}, retrying after refresh...")
+                    time.sleep(1)
+                    # Try to refresh page partially
+                    try:
+                        self.driver.execute_script("window.scrollBy(0, -100);")
+                        time.sleep(0.5)
+                        self.driver.execute_script("window.scrollBy(0, 100);")
+                        time.sleep(0.5)
+                    except:
+                        pass
+                    continue
+                else:
+                    print(f"    ❌ Element still stale after {max_retries} retries, skipping...")
+                    return None
+            except Exception as e:
+                print(f"    ⚠️ Non-stale error on attempt {attempt + 1}: {e}")
+                if attempt < max_retries:
+                    time.sleep(0.5)
+                    continue
+                else:
+                    return None
+        
+        return None
+
     def is_comment_div(self, div_element):
-        """Check if a div element contains comment-like content"""
+        """Check if a div element contains comment-like content with stale element protection"""
         try:
-            # Get text content
-            text = div_element.text.strip()
+            # Get text content safely
+            text = safe_get_element_text(div_element)
             if len(text) < 10:  # Too short to be a meaningful comment
                 return False
             
-            # Check for profile links (common in comments)
-            profile_links = div_element.find_elements(By.XPATH, ".//a[contains(@href, 'profile') or contains(@href, 'user') or contains(@href, 'facebook.com/')]")
+            # Check for profile links (common in comments) safely
+            profile_links = safe_find_elements(div_element, By.XPATH, ".//a[contains(@href, 'profile') or contains(@href, 'user') or contains(@href, 'facebook.com/')]")
             if profile_links:
                 return True
             
-            # Check for comment-specific attributes
-            aria_label = div_element.get_attribute('aria-label') or ''
+            # Check for comment-specific attributes safely
+            aria_label = safe_get_element_attribute(div_element, 'aria-label')
             if 'comment' in aria_label.lower() or 'bình luận' in aria_label.lower():
                 return True
             
-            # Check for comment-specific classes
-            class_attr = div_element.get_attribute('class') or ''
+            # Check for comment-specific classes safely
+            class_attr = safe_get_element_attribute(div_element, 'class')
             if any(keyword in class_attr.lower() for keyword in ['comment', 'reply', 'response']):
                 return True
             
-            # Check for comment-specific data attributes
-            data_ft = div_element.get_attribute('data-ft') or ''
+            # Check for comment-specific data attributes safely
+            data_ft = safe_get_element_attribute(div_element, 'data-ft')
             if 'comment' in data_ft.lower():
                 return True
             
-            # Check for role attribute
-            role = div_element.get_attribute('role') or ''
+            # Check for role attribute safely
+            role = safe_get_element_attribute(div_element, 'role')
             if role == 'article':
                 return True
             
-            # Check for comment ID patterns
-            element_id = div_element.get_attribute('id') or ''
+            # Check for comment ID patterns safely
+            element_id = safe_get_element_attribute(div_element, 'id')
             if 'comment' in element_id.lower():
                 return True
             
-            # Check for time elements (comments often have timestamps)
-            time_elements = div_element.find_elements(By.XPATH, ".//time | .//span[contains(@class, 'time')] | .//a[contains(@class, 'time')]")
+            # Check for time elements (comments often have timestamps) safely
+            time_elements = safe_find_elements(div_element, By.XPATH, ".//time | .//span[contains(@class, 'time')] | .//a[contains(@class, 'time')]")
             if time_elements:
                 return True
             
-            # Check for like/reply buttons (common in comments)
-            action_buttons = div_element.find_elements(By.XPATH, ".//*[contains(text(), 'Like') or contains(text(), 'Reply') or contains(text(), 'Thích') or contains(text(), 'Trả lời')]")
+            # Check for like/reply buttons (common in comments) safely
+            action_buttons = safe_find_elements(div_element, By.XPATH, ".//*[contains(text(), 'Like') or contains(text(), 'Reply') or contains(text(), 'Thích') or contains(text(), 'Trả lời')]")
             if action_buttons:
                 return True
             
@@ -875,7 +1040,7 @@ class FacebookGroupsScraper:
                                 try:
                                     print(f"\n--- Processing comment div {i+1}/{len(comment_parent_divs)} ---")
                                     
-                                    comment_data = self.extract_comment_data_focused(element, i)
+                                    comment_data = self.extract_with_retry(element, i)
                                     
                                     if not comment_data:
                                         continue
@@ -888,6 +1053,7 @@ class FacebookGroupsScraper:
                                     # 🚫 BỎ QUA NGƯỜI DÙNG ẨN DANH
                                     if is_anonymous_user(comment_data['Name']):
                                         print(f"  🚫 Skipped anonymous user: {comment_data['Name']}")
+                                        self._anonymous_filtered_count += 1
                                         continue
                                         
                                     # Check for duplicates
@@ -926,7 +1092,7 @@ class FacebookGroupsScraper:
                         try:
                             print(f"\n--- Processing comment div {i+1}/{len(comment_parent_divs)} ---")
                             
-                            comment_data = self.extract_comment_data_focused(element, i)
+                            comment_data = self.extract_with_retry(element, i)
                             
                             if not comment_data:
                                 continue
@@ -939,6 +1105,7 @@ class FacebookGroupsScraper:
                             # 🚫 BỎ QUA NGƯỜI DÙNG ẨN DANH
                             if is_anonymous_user(comment_data['Name']):
                                 print(f"  🚫 Skipped anonymous user: {comment_data['Name']}")
+                                self._anonymous_filtered_count += 1
                                 continue
                                 
                             # Check for duplicates
@@ -1053,18 +1220,20 @@ class FacebookGroupsScraper:
                 except:
                     continue
         
-        # Sort by position
+        # Sort by position and refresh stale elements
         try:
             all_comment_elements.sort(key=lambda x: (x.location['y'], x.location['x']))
         except:
-            pass
+            # If sorting fails due to stale elements, refresh them
+            print("⚠️ Sorting failed, refreshing stale elements...")
+            all_comment_elements = self.refresh_stale_elements(all_comment_elements)
         
         comments = []
         seen_content = set()
         
         print(f"Processing {len(all_comment_elements)} potential comment elements...")
         
-        # Process each element
+        # Process each element with stale element protection
         for i, element in enumerate(all_comment_elements):
             if self._stop_flag:
                 break
@@ -1072,7 +1241,18 @@ class FacebookGroupsScraper:
             try:
                 print(f"\n--- Element {i+1}/{len(all_comment_elements)} ---")
                 
-                comment_data = self.extract_comment_data_focused(element, i)
+                # Pre-check if element is still valid
+                try:
+                    # Quick stale check
+                    _ = element.tag_name
+                except StaleElementReferenceException:
+                    print(f"  ⚠️ Element {i+1} is stale, skipping...")
+                    continue
+                except Exception:
+                    print(f"  ⚠️ Element {i+1} is invalid, skipping...")
+                    continue
+                
+                comment_data = self.extract_with_retry(element, i)
                 
                 if not comment_data:
                     continue
@@ -1085,6 +1265,7 @@ class FacebookGroupsScraper:
                 # 🚫 BỎ QUA NGƯỜI DÙNG ẨN DANH
                 if is_anonymous_user(comment_data['Name']):
                     print(f"  🚫 Skipped anonymous user: {comment_data['Name']}")
+                    self._anonymous_filtered_count += 1
                     continue
                     
                 # Check for duplicates
@@ -1101,17 +1282,21 @@ class FacebookGroupsScraper:
                 comments.append(comment_data)
                 print(f"  ✅ Added: {comment_data['Name']} - Profile: {comment_data['ProfileLink'][:50]}...")
                 
+            except StaleElementReferenceException:
+                print(f"  ⚠️ Stale element reference for element {i+1}, skipping...")
+                continue
             except Exception as e:
-                print(f"  Error processing element {i}: {e}")
+                print(f"  ⚠️ Error processing element {i+1}: {e}")
                 continue
         
         print(f"\n=== FOCUSED EXTRACTION COMPLETE: {len(comments)} comments ===")
         return comments
 
     def extract_comment_data_focused(self, element, index):
-        """FOCUSED comment data extraction với enhanced UID resolution"""
+        """FOCUSED comment data extraction với enhanced UID resolution và stale element handling"""
         try:
-            full_text = element.text.strip()
+            # Safe text extraction with stale element handling
+            full_text = safe_get_element_text(element)
             if len(full_text) < 5:
                 print(f"  ❌ Text too short: '{full_text}'")
                 return None
@@ -1122,18 +1307,18 @@ class FacebookGroupsScraper:
             profile_href = ""
             uid = "Unknown"
             
-            # FOCUSED: Enhanced username extraction
+            # FOCUSED: Enhanced username extraction with stale element protection
             print(f"    🎯 FOCUSED analysis of element structure...")
             
-            # Method 1: Get ALL links and analyze each one
+            # Method 1: Get ALL links and analyze each one with safe methods
             try:
-                all_links = element.find_elements(By.XPATH, ".//a")
+                all_links = safe_find_elements(element, By.XPATH, ".//a")
                 print(f"    Found {len(all_links)} total links in element")
                 
                 for link_index, link in enumerate(all_links):
                     try:
-                        link_text = link.text.strip()
-                        link_href = link.get_attribute("href") or ""
+                        link_text = safe_get_element_text(link)
+                        link_href = safe_get_element_attribute(link, "href")
                         
                         print(f"      Link {link_index+1}: Text='{link_text}' | Href={link_href[:60]}...")
                         
@@ -1190,9 +1375,9 @@ class FacebookGroupsScraper:
             # Fallback: If no username from links, try using the first line of the first child element's text
             if username == "Unknown":
                 try:
-                    children = element.find_elements(By.XPATH, "./*")
+                    children = safe_find_elements(element, By.XPATH, "./*")
                     if children:
-                        first_child_text = (children[0].text or "").strip()
+                        first_child_text = safe_get_element_text(children[0])
                         if first_child_text:
                             first_line = first_child_text.splitlines()[0].strip()
                             # Basic validation for a plausible name line + anonymous check
@@ -1409,7 +1594,7 @@ class FBGroupsAppGUI:
                                   wraplength=900, justify="left", font=("Arial", 11), bg="#121212")
         self.lbl_status.pack(anchor="w", padx=15, pady=(15,5))
 
-        self.lbl_progress_detail = tk.Label(status_frame, text="💡 NEW: Username → UID conversion | Anonymous user filtering | Enhanced validation | Smart debugging",
+        self.lbl_progress_detail = tk.Label(status_frame, text="💡 NEW: Username → UID conversion | Anonymous filtering | Stale element protection | Enhanced debugging",
                                           fg="#b0b0b0", wraplength=900, justify="left", font=("Arial", 9), bg="#121212")
         self.lbl_progress_detail.pack(anchor="w", padx=15, pady=(0,10))
 

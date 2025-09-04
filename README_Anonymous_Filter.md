@@ -1,4 +1,4 @@
-# 🎯 Facebook Groups Scraper - Enhanced UID + Anonymous Filter
+# 🎯 Facebook Groups Scraper - Enhanced UID + Anonymous Filter + Stale Element Fix
 
 ## 🚫 **Anonymous Filter Features**
 
@@ -78,5 +78,29 @@
 - **Filter timing**: Trước khi resolve UID (tiết kiệm thời gian)
 - **Comprehensive patterns**: 15+ regex patterns
 - **Validation layers**: Length, special chars, number patterns
+- **Stale element protection**: Safe extraction với retry mechanism
+- **Error handling**: Graceful handling của Selenium errors
 - **Logging**: Chi tiết từng case được filter
 - **Statistics tracking**: Count anonymous users filtered
+
+## 🛠️ **Stale Element Protection:**
+
+### Problem Solved:
+```
+❌ Before: stale element reference: stale element not found
+✅ After: Automatic retry with element refresh
+```
+
+### Features:
+- **safe_get_element_text()**: Safe text extraction với retry
+- **safe_get_element_attribute()**: Safe attribute extraction  
+- **safe_find_elements()**: Safe element finding
+- **extract_with_retry()**: Retry mechanism cho extraction
+- **refresh_stale_elements()**: Re-find elements khi stale
+- **Pre-validation**: Check element validity trước khi process
+
+### Error Handling:
+- **StaleElementReferenceException**: Auto retry với refresh
+- **Element validation**: Pre-check element trước processing
+- **Graceful degradation**: Skip stale elements instead of crash
+- **Performance**: Minimal impact với smart retry logic
