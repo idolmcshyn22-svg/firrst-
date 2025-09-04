@@ -1066,13 +1066,17 @@ class FacebookGroupsScraper:
                         print(f"Found next div after parent_with_html_div")
                         print(f"Next div class: {next_div.get_attribute('class')}")
                         
-                        # Find and click "View more comments" button until no more comments
-                        print("🔄 Starting 'View more comments' click loop...")
+                        # IMPROVED click loop với fresh container re-finding
+                        print("🔄 Starting improved 'View more comments' click loop...")
                         previous_comment_count = 0
                         no_new_comments_count = 0
-                        max_no_new_comments = 3  # Stop after 3 consecutive checks with no new comments
+                        max_no_new_comments = 3
+                        click_round = 0
                         
                         while no_new_comments_count < max_no_new_comments:
+                            click_round += 1
+                            print(f"\n--- Click Round {click_round} ---")
+                            
                             # Look for "View more comments" button
                             view_more_selectors = [
                                 "//button[contains(text(), 'View more comments')]",
@@ -1082,9 +1086,7 @@ class FacebookGroupsScraper:
                                 "//*[contains(text(), 'View more')]",
                                 "//*[contains(text(), 'Show more comments')]",
                                 "//*[contains(text(), 'Load more comments')]",
-                                "//*[contains(text(), 'See more comments')]",
-                                "//button[contains(@aria-label, 'View more comments')]",
-                                "//a[contains(@aria-label, 'View more comments')]"
+                                "//*[contains(text(), 'See more comments')]"
                             ]
                             
                             view_more_button = None
@@ -1100,78 +1102,105 @@ class FacebookGroupsScraper:
                             
                             if view_more_button:
                                 try:
-                                    # Click the "View more comments" button
                                     self.driver.execute_script("arguments[0].click();", view_more_button)
                                     print("🖱️ Clicked 'View more comments' button")
                                 except Exception as e:
                                     print(f"⚠️ Error clicking 'View more comments' button: {e}")
-                                    # Try alternative click method
-                                    try:
-                                        view_more_button.click()
-                                        print("🖱️ Clicked 'View more comments' button (alternative method)")
-                                    except Exception as e2:
-                                        print(f"⚠️ Alternative click also failed: {e2}")
-                                        break
+                                    break
                             else:
                                 print("⚠️ No 'View more comments' button found")
                                 no_new_comments_count += 1
                                 print(f"⚠️ No new comments button detected ({no_new_comments_count}/{max_no_new_comments})")
                                 break
                             
-                            # Wait 5 seconds for new comments to load
+                            # Wait for new comments to load
                             print("⏳ Waiting 5 seconds for new comments to load...")
                             time.sleep(5)
                             
-                            # IMMEDIATE PROCESSING: Extract data ngay để tránh stale elements
-                            current_comment_divs = []
+                            # RE-FIND fresh container và extract immediately
                             processed_in_this_round = 0
+                            current_comment_divs = []
                             
-                            next_div_children = next_div.find_elements(By.XPATH, "./div")
-                            for child_index, child in enumerate(next_div_children):
-                                if self.is_comment_div(child):
-                                    try:
-                                        # IMMEDIATE extraction thay vì lưu element
-                                        comment_data = self.extract_comment_data_focused(child, len(all_comments_data))
-                                        
-                                        if comment_data:
-                                            # Check anonymous và duplicates ngay
-                                            if comment_data['Name'] != "Unknown" and not is_anonymous_user(comment_data['Name']):
-                                                content_signature = f"{comment_data['Name']}_{comment_data['ProfileLink']}"
-                                                if content_signature not in seen_content:
-                                                    seen_content.add(content_signature)
-                                                    comment_data['Type'] = 'Comment'
-                                                    comment_data['Layout'] = self.current_layout
-                                                    comment_data['Source'] = 'Immediate Processing'
-                                                    all_comments_data.append(comment_data)
-                                                    processed_in_this_round += 1
-                                                    print(f"✅ IMMEDIATE: Added {comment_data['Name']}")
+                            try:
+                                # Re-find parent và next_div để tránh stale
+                                fresh_parent = self.driver.find_element(By.XPATH, "//*[contains(@class, 'html-div')]")
+                                fresh_next_div = fresh_parent.find_element(By.XPATH, "./following-sibling::div[1]")
+                                fresh_children = fresh_next_div.find_elements(By.XPATH, "./div")
+                                
+                                print(f"🔄 Re-found fresh container with {len(fresh_children)} children")
+                                
+                                for child_index, child in enumerate(fresh_children):
+                                    if self.is_comment_div(child):
+                                        try:
+                                            # IMMEDIATE extraction
+                                            comment_data = self.extract_comment_data_focused(child, len(all_comments_data))
+                                            
+                                            if comment_data:
+                                                # Check anonymous và duplicates ngay
+                                                if comment_data['Name'] != "Unknown" and not is_anonymous_user(comment_data['Name']):
+                                                    content_signature = f"{comment_data['Name']}_{comment_data['ProfileLink']}"
+                                                    if content_signature not in seen_content:
+                                                        seen_content.add(content_signature)
+                                                        comment_data['Type'] = 'Comment'
+                                                        comment_data['Layout'] = self.current_layout
+                                                        comment_data['Source'] = f'Immediate Round {click_round}'
+                                                        all_comments_data.append(comment_data)
+                                                        processed_in_this_round += 1
+                                                        print(f"✅ IMMEDIATE: Added {comment_data['Name']}")
+                                                    else:
+                                                        print(f"✗ IMMEDIATE: Duplicate {comment_data['Name']}")
                                                 else:
-                                                    print(f"✗ IMMEDIATE: Duplicate {comment_data['Name']}")
-                                            else:
-                                                if is_anonymous_user(comment_data['Name']):
-                                                    print(f"🚫 IMMEDIATE: Filtered anonymous {comment_data['Name']}")
+                                                    if comment_data['Name'] != "Unknown" and is_anonymous_user(comment_data['Name']):
+                                                        print(f"🚫 IMMEDIATE: Filtered anonymous {comment_data['Name']}")
+                                                        self._anonymous_filtered_count += 1
+                                            
+                                            current_comment_divs.append(child)
+                                            
+                                        except Exception as extract_error:
+                                            print(f"⚠️ IMMEDIATE extraction error: {extract_error}")
+                                            current_comment_divs.append(child)
+                                            continue
+                                
+                            except Exception as container_error:
+                                print(f"⚠️ Error re-finding fresh container: {container_error}")
+                                # Fallback: try global extraction for this round
+                                try:
+                                    global_elements = self.extract_all_fresh_comments()
+                                    print(f"🔄 Fallback: Found {len(global_elements)} global elements")
+                                    
+                                    for elem in global_elements[-10:]:  # Process last 10 (likely new ones)
+                                        try:
+                                            comment_data = self.extract_comment_data_focused(elem, len(all_comments_data))
+                                            if comment_data and comment_data['Name'] != "Unknown":
+                                                if not is_anonymous_user(comment_data['Name']):
+                                                    content_signature = f"{comment_data['Name']}_{comment_data['ProfileLink']}"
+                                                    if content_signature not in seen_content:
+                                                        seen_content.add(content_signature)
+                                                        comment_data['Source'] = f'Global Fallback Round {click_round}'
+                                                        all_comments_data.append(comment_data)
+                                                        processed_in_this_round += 1
+                                                        print(f"✅ FALLBACK: Added {comment_data['Name']}")
+                                                else:
                                                     self._anonymous_filtered_count += 1
-                                        
-                                        current_comment_divs.append(child)  # For counting
-                                        
-                                    except Exception as extract_error:
-                                        print(f"⚠️ IMMEDIATE extraction error for child {child_index}: {extract_error}")
-                                        current_comment_divs.append(child)  # Still count for progress
-                                        continue
+                                        except:
+                                            continue
+                                    
+                                except Exception as global_error:
+                                    print(f"⚠️ Global fallback also failed: {global_error}")
+                                    break
                             
                             current_comment_count = len(current_comment_divs)
-                            print(f"📊 Current comment count: {current_comment_count} (previous: {previous_comment_count})")
+                            print(f"📊 Round {click_round}: {current_comment_count} divs found")
                             print(f"✅ Processed {processed_in_this_round} new comments in this round")
                             print(f"📊 Total processed so far: {len(all_comments_data)} comments")
                             
-                            # Check if new comments were loaded
-                            if current_comment_count > previous_comment_count:
-                                print(f"✅ New comments detected! (+{current_comment_count - previous_comment_count})")
-                                previous_comment_count = current_comment_count
+                            # Check progress
+                            if processed_in_this_round > 0:
+                                print(f"✅ Progress made in round {click_round}!")
                                 no_new_comments_count = 0  # Reset counter
                             else:
                                 no_new_comments_count += 1
-                                print(f"⚠️ No new comments detected ({no_new_comments_count}/{max_no_new_comments})")
+                                print(f"⚠️ No progress in round {click_round} ({no_new_comments_count}/{max_no_new_comments})")
                             
                             # Check for stop flag
                             if self._stop_flag:
