@@ -781,6 +781,128 @@ class FacebookGroupsScraper:
         
         return None
 
+    def extract_fresh_comments_from_container(self, container_element):
+        """
+        Extract fresh comment elements from container to avoid stale references
+        Args:
+            container_element: Parent container element
+        Returns:
+            list: Fresh comment elements
+        """
+        print("🔄 Extracting fresh comment elements from container...")
+        fresh_elements = []
+        
+        try:
+            # Strategy 1: Find all divs in container and filter for comments
+            all_divs = container_element.find_elements(By.XPATH, ".//div")
+            print(f"  Found {len(all_divs)} total divs in container")
+            
+            comment_count = 0
+            for div in all_divs:
+                try:
+                    if self.is_comment_div(div):
+                        fresh_elements.append(div)
+                        comment_count += 1
+                        
+                        # Log every 10th comment for progress
+                        if comment_count % 10 == 0:
+                            print(f"    ✅ Found {comment_count} comment divs so far...")
+                            
+                except StaleElementReferenceException:
+                    print(f"    ⚠️ Div became stale during check, skipping...")
+                    continue
+                except Exception as e:
+                    continue
+            
+            print(f"✅ Extracted {len(fresh_elements)} fresh comment elements")
+            return fresh_elements
+            
+        except Exception as e:
+            print(f"⚠️ Error extracting fresh elements: {e}")
+            return []
+
+    def extract_all_fresh_comments(self):
+        """
+        Extract all fresh comments from current page state
+        Returns:
+            list: Fresh comment elements
+        """
+        print("🔄 Extracting ALL fresh comments from current page...")
+        fresh_elements = []
+        
+        try:
+            # Strategy 1: Find comments using multiple selectors
+            comment_selectors = []
+            
+            if self.current_layout == "www":
+                comment_selectors = [
+                    "//div[@role='article']",
+                    "//div[contains(@aria-label, 'Comment by')]",
+                    "//div[contains(@aria-label, 'Bình luận của')]",
+                    "//div[.//a[contains(@href, 'facebook.com/') and not(contains(@href, 'groups/') or contains(@href, 'pages/') or contains(@href, 'events/'))]]"
+                ]
+            elif self.current_layout == "mobile":
+                comment_selectors = [
+                    "//div[@data-sigil='comment']",
+                    "//div[contains(@data-ft, 'comment')]",
+                    "//div[contains(@id, 'comment_')]",
+                    "//div[.//a[contains(@href, 'profile.php') or contains(@href, 'user.php')]]"
+                ]
+            else:  # mbasic
+                comment_selectors = [
+                    "//div[@data-ft and contains(@data-ft, 'comment')]",
+                    "//div[contains(@id, 'comment_')]",
+                    "//div[.//a[contains(@href, 'profile.php?id=')]]"
+                ]
+            
+            # Extract using each selector
+            for i, selector in enumerate(comment_selectors):
+                try:
+                    elements = self.driver.find_elements(By.XPATH, selector)
+                    print(f"  Selector {i+1}: Found {len(elements)} elements")
+                    
+                    for elem in elements:
+                        try:
+                            # Quick validation
+                            text = safe_get_element_text(elem)
+                            if len(text) > 10 and elem not in fresh_elements:
+                                fresh_elements.append(elem)
+                        except:
+                            continue
+                            
+                except Exception as e:
+                    print(f"  Selector {i+1} failed: {e}")
+                    continue
+            
+            # Remove duplicates and sort by position
+            unique_elements = []
+            seen_locations = set()
+            
+            for elem in fresh_elements:
+                try:
+                    location = elem.location
+                    location_key = f"{location['x']}_{location['y']}"
+                    
+                    if location_key not in seen_locations:
+                        unique_elements.append(elem)
+                        seen_locations.add(location_key)
+                        
+                except:
+                    continue
+            
+            # Sort by position (top to bottom)
+            try:
+                unique_elements.sort(key=lambda x: (x.location['y'], x.location['x']))
+            except:
+                pass
+            
+            print(f"✅ Final fresh elements: {len(unique_elements)} unique comments")
+            return unique_elements
+            
+        except Exception as e:
+            print(f"⚠️ Error in extract_all_fresh_comments: {e}")
+            return []
+
     def is_comment_div(self, div_element):
         """Check if a div element contains comment-like content with stale element protection"""
         try:
@@ -840,8 +962,12 @@ class FacebookGroupsScraper:
             return False
 
     def extract_groups_comments(self):
-        """FOCUSED comment extraction targeting larger height container"""
-        print(f"=== EXTRACTING GROUPS COMMENTS (FOCUSED) ===")
+        """FOCUSED comment extraction với immediate processing để tránh stale elements"""
+        print(f"=== EXTRACTING GROUPS COMMENTS (FOCUSED + IMMEDIATE) ===")
+        
+        # Initialize results
+        all_comments_data = []
+        seen_content = set()
 
         # Find "All comments" button's parent with class html-div
         try:
@@ -996,16 +1122,47 @@ class FacebookGroupsScraper:
                             print("⏳ Waiting 5 seconds for new comments to load...")
                             time.sleep(5)
                             
-                            # Count current comments
+                            # IMMEDIATE PROCESSING: Extract data ngay để tránh stale elements
                             current_comment_divs = []
+                            processed_in_this_round = 0
+                            
                             next_div_children = next_div.find_elements(By.XPATH, "./div")
-                            for child in next_div_children:
+                            for child_index, child in enumerate(next_div_children):
                                 if self.is_comment_div(child):
-                                    print(f"✅ Found comment div: {child.text}")
-                                    current_comment_divs.append(child)
+                                    try:
+                                        # IMMEDIATE extraction thay vì lưu element
+                                        comment_data = self.extract_comment_data_focused(child, len(all_comments_data))
+                                        
+                                        if comment_data:
+                                            # Check anonymous và duplicates ngay
+                                            if comment_data['Name'] != "Unknown" and not is_anonymous_user(comment_data['Name']):
+                                                content_signature = f"{comment_data['Name']}_{comment_data['ProfileLink']}"
+                                                if content_signature not in seen_content:
+                                                    seen_content.add(content_signature)
+                                                    comment_data['Type'] = 'Comment'
+                                                    comment_data['Layout'] = self.current_layout
+                                                    comment_data['Source'] = 'Immediate Processing'
+                                                    all_comments_data.append(comment_data)
+                                                    processed_in_this_round += 1
+                                                    print(f"✅ IMMEDIATE: Added {comment_data['Name']}")
+                                                else:
+                                                    print(f"✗ IMMEDIATE: Duplicate {comment_data['Name']}")
+                                            else:
+                                                if is_anonymous_user(comment_data['Name']):
+                                                    print(f"🚫 IMMEDIATE: Filtered anonymous {comment_data['Name']}")
+                                                    self._anonymous_filtered_count += 1
+                                        
+                                        current_comment_divs.append(child)  # For counting
+                                        
+                                    except Exception as extract_error:
+                                        print(f"⚠️ IMMEDIATE extraction error for child {child_index}: {extract_error}")
+                                        current_comment_divs.append(child)  # Still count for progress
+                                        continue
                             
                             current_comment_count = len(current_comment_divs)
                             print(f"📊 Current comment count: {current_comment_count} (previous: {previous_comment_count})")
+                            print(f"✅ Processed {processed_in_this_round} new comments in this round")
+                            print(f"📊 Total processed so far: {len(all_comments_data)} comments")
                             
                             # Check if new comments were loaded
                             if current_comment_count > previous_comment_count:
@@ -1022,25 +1179,31 @@ class FacebookGroupsScraper:
                                 break
                         
                         print(f"🏁 Click loop completed. Final comment count: {current_comment_count}")
+                        print(f"📊 IMMEDIATE processing results: {len(all_comments_data)} comments extracted during clicks")
                         
-                        # Use the final comment divs
-                        comment_parent_divs = current_comment_divs
-                        print(f"🎯 Final comment divs found: {len(comment_parent_divs)}")
+                        # Return immediate results (đã được process trong loop)
+                        if len(all_comments_data) > 0:
+                            print(f"\n=== IMMEDIATE EXTRACTION COMPLETE: {len(all_comments_data)} comments ===")
+                            return all_comments_data
+                        
+                        # FALLBACK: Nếu immediate processing không có kết quả, thử fresh extraction
+                        print("⚠️ No results from immediate processing, trying fresh extraction...")
+                        fresh_comment_elements = self.extract_all_fresh_comments()
 
-                        if len(comment_parent_divs) > 0:
-                            print(f"🎯 Found {len(comment_parent_divs)} comment divs in next_div children")
-                            # Extract comment data from the found divs
+                        if len(fresh_comment_elements) > 0:
+                            print(f"🎯 Processing {len(fresh_comment_elements)} fresh comment elements")
+                            # Extract comment data from the fresh elements
                             comments_data = []
-                            seen_content = set()
+                            fresh_seen_content = set()
                             
-                            for i, element in enumerate(comment_parent_divs):
+                            for i, element in enumerate(fresh_comment_elements):
                                 if self._stop_flag:
                                     break
                                     
                                 try:
-                                    print(f"\n--- Processing comment div {i+1}/{len(comment_parent_divs)} ---")
+                                    print(f"\n--- Processing fresh comment element {i+1}/{len(fresh_comment_elements)} ---")
                                     
-                                    comment_data = self.extract_with_retry(element, i)
+                                    comment_data = self.extract_comment_data_focused(element, i)
                                     
                                     if not comment_data:
                                         continue
@@ -1058,23 +1221,23 @@ class FacebookGroupsScraper:
                                         
                                     # Check for duplicates
                                     content_signature = f"{comment_data['Name']}_{comment_data['ProfileLink']}"
-                                    if content_signature in seen_content:
+                                    if content_signature in fresh_seen_content:
                                         print("  ✗ Skipped: duplicate user")
                                         continue
-                                    seen_content.add(content_signature)
+                                    fresh_seen_content.add(content_signature)
                                     
                                     comment_data['Type'] = 'Comment'
                                     comment_data['Layout'] = self.current_layout
-                                    comment_data['Source'] = 'All Comments Container'
+                                    comment_data['Source'] = 'Fresh Extraction Fallback'
                                     
                                     comments_data.append(comment_data)
                                     print(f"  ✅ Added: {comment_data['Name']} - Profile: {comment_data['ProfileLink'][:50]}...")
                                     
                                 except Exception as e:
-                                    print(f"  Error processing comment div {i}: {e}")
+                                    print(f"  Error processing fresh element {i}: {e}")
                                     continue
                             
-                            print(f"\n=== EXTRACTION COMPLETE: {len(comments_data)} comments ===")
+                            print(f"\n=== FRESH FALLBACK EXTRACTION COMPLETE: {len(comments_data)} comments ===")
                             return comments_data
                             
                     except Exception as e:
@@ -1145,64 +1308,18 @@ class FacebookGroupsScraper:
         except:
             pass
         
-        # FOCUSED: Search within the target container first
-        all_comment_elements = []
+        # FALLBACK: Use fresh extraction if no comments found above
+        print("🔄 Using fresh extraction strategy to avoid stale elements...")
         
-        print("🎯 Searching within target container...")
+        # Extract all fresh comments from current page
+        all_comment_elements = self.extract_all_fresh_comments()
         
-        # Strategy 1: Layout-specific selectors within target container
-        if self.current_layout == "www":
-            selectors = [
-                ".//div[@role='article']",
-                ".//div[contains(@aria-label, 'Comment by')]",
-                ".//div[contains(@aria-label, 'Bình luận của')]",
-                ".//div[.//a[contains(@href, '/user/') or contains(@href, '/profile/')]]",
-                ".//div[.//h3//a[contains(@href, 'facebook.com')]]"
-            ]
-        elif self.current_layout == "mobile":
-            selectors = [
-                ".//div[@data-sigil='comment']",
-                ".//div[contains(@data-ft, 'comment')]",
-                ".//div[contains(@id, 'comment_')]",
-                ".//div[.//a[contains(@href, 'profile.php') or contains(@href, 'user.php')]]"
-            ]
-        else:  # mbasic
-            selectors = [
-                ".//div[@data-ft and contains(@data-ft, 'comment')]",
-                ".//div[contains(@id, 'comment_')]",
-                ".//table//div[.//a[contains(@href, 'profile.php')]]",
-                ".//div[.//a[contains(@href, 'profile.php?id=')]]"
-            ]
-        
-        # Strategy 2: If not enough elements, expand search
-        if len(all_comment_elements) < 10:
-            print("⚠️ Not enough elements in target container, expanding search...")
-            
-            # Search in the entire page as fallback
-            for i, selector in enumerate(selectors):
-                try:
-                    # Remove leading "./" to search entire document
-                    global_selector = selector.replace(".//", "//")
-                    elements = self.driver.find_elements(By.XPATH, global_selector)
-                    print(f"Global search - Selector {i+1}: Found {len(elements)} elements")
-                    
-                    for elem in elements:
-                        if elem not in all_comment_elements:
-                            all_comment_elements.append(elem)
-                            
-                except Exception as e:
-                    print(f"Global search - Selector {i+1} failed: {e}")
-                    continue
-        
-        # Strategy 3: Fallback selectors
         if len(all_comment_elements) == 0:
-            print("⚠️ No comments with standard selectors, trying fallback...")
+            print("⚠️ No comments found with fresh extraction, trying fallback selectors...")
             
             fallback_selectors = [
-                # Look for any div with profile links
                 "//div[.//a[contains(@href, 'facebook.com/')] and string-length(normalize-space(text())) > 20]",
                 "//div[string-length(normalize-space(text())) > 30]",
-                "//div[@role='article' and string-length(normalize-space(text())) > 20]",
                 "//*[.//a[contains(@href, 'profile')] and string-length(normalize-space(text())) > 15]"
             ]
             
@@ -1211,48 +1328,32 @@ class FacebookGroupsScraper:
                     elements = self.driver.find_elements(By.XPATH, selector)
                     print(f"Fallback selector: Found {len(elements)} elements")
                     for elem in elements:
-                        if elem not in all_comment_elements:
-                            all_comment_elements.append(elem)
+                        try:
+                            text = safe_get_element_text(elem)
+                            if len(text) > 10 and elem not in all_comment_elements:
+                                all_comment_elements.append(elem)
+                        except:
+                            continue
                     
-                    # Stop if we found enough elements
                     if len(all_comment_elements) > 20:
                         break
                 except:
                     continue
         
-        # Sort by position and refresh stale elements
-        try:
-            all_comment_elements.sort(key=lambda x: (x.location['y'], x.location['x']))
-        except:
-            # If sorting fails due to stale elements, refresh them
-            print("⚠️ Sorting failed, refreshing stale elements...")
-            all_comment_elements = self.refresh_stale_elements(all_comment_elements)
-        
         comments = []
         seen_content = set()
         
-        print(f"Processing {len(all_comment_elements)} potential comment elements...")
+        print(f"Processing {len(all_comment_elements)} fresh comment elements...")
         
-        # Process each element with stale element protection
+        # Process each fresh element
         for i, element in enumerate(all_comment_elements):
             if self._stop_flag:
                 break
                 
             try:
-                print(f"\n--- Element {i+1}/{len(all_comment_elements)} ---")
+                print(f"\n--- Fresh Element {i+1}/{len(all_comment_elements)} ---")
                 
-                # Pre-check if element is still valid
-                try:
-                    # Quick stale check
-                    _ = element.tag_name
-                except StaleElementReferenceException:
-                    print(f"  ⚠️ Element {i+1} is stale, skipping...")
-                    continue
-                except Exception:
-                    print(f"  ⚠️ Element {i+1} is invalid, skipping...")
-                    continue
-                
-                comment_data = self.extract_with_retry(element, i)
+                comment_data = self.extract_comment_data_focused(element, i)
                 
                 if not comment_data:
                     continue
@@ -1277,19 +1378,19 @@ class FacebookGroupsScraper:
                 
                 comment_data['Type'] = 'Comment'
                 comment_data['Layout'] = self.current_layout
-                comment_data['Source'] = 'Target Container (FOCUSED)'
+                comment_data['Source'] = 'Fresh Extraction (STALE-FREE)'
                 
                 comments.append(comment_data)
                 print(f"  ✅ Added: {comment_data['Name']} - Profile: {comment_data['ProfileLink'][:50]}...")
                 
             except StaleElementReferenceException:
-                print(f"  ⚠️ Stale element reference for element {i+1}, skipping...")
+                print(f"  ⚠️ Element {i+1} became stale during processing, skipping...")
                 continue
             except Exception as e:
-                print(f"  ⚠️ Error processing element {i+1}: {e}")
+                print(f"  ⚠️ Error processing fresh element {i+1}: {e}")
                 continue
         
-        print(f"\n=== FOCUSED EXTRACTION COMPLETE: {len(comments)} comments ===")
+        print(f"\n=== FRESH EXTRACTION COMPLETE: {len(comments)} comments ===")
         return comments
 
     def extract_comment_data_focused(self, element, index):

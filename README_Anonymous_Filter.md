@@ -102,5 +102,31 @@
 ### Error Handling:
 - **StaleElementReferenceException**: Auto retry với refresh
 - **Element validation**: Pre-check element trước processing
+- **Immediate processing**: Extract data ngay khi load để tránh stale
+- **Fresh extraction**: Re-find elements khi cần thiết
 - **Graceful degradation**: Skip stale elements instead of crash
 - **Performance**: Minimal impact với smart retry logic
+
+## 🔧 **Stale Element Strategy:**
+
+### Problem:
+```
+❌ Elements become stale after DOM changes (clicking "View more")
+❌ Retry on stale elements often fails
+❌ Processing cached elements causes errors
+```
+
+### Solution:
+```
+✅ IMMEDIATE PROCESSING: Extract data ngay trong click loop
+✅ FRESH EXTRACTION: Re-find elements sau mỗi DOM change
+✅ SAFE METHODS: All element interactions với retry protection
+✅ FALLBACK CHAIN: Multiple strategies nếu một cách fail
+```
+
+### Implementation:
+1. **Immediate Processing**: Extract comment data ngay khi tìm thấy element
+2. **Safe Methods**: Tất cả element operations có retry mechanism  
+3. **Fresh Re-extraction**: Re-find elements sau DOM changes
+4. **Smart Fallback**: Multiple extraction strategies
+5. **Error Resilience**: Graceful handling của tất cả Selenium errors
