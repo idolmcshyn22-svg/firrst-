@@ -364,6 +364,7 @@ class FacebookGroupsScraper:
         self.cookies_dict = parse_cookies_to_dict(self.cookie_str)
         self._stop_flag = False
         self.current_layout = None
+        self._anonymous_filtered_count = 0
         
         if self.cookies_list:
             self._login_with_cookies()
@@ -1241,15 +1242,42 @@ class FacebookGroupsScraper:
         """Main scraping orchestrator with FOCUSED approach"""
         print(f"=== STARTING FOCUSED GROUPS SCRAPING ===")
         
+        # Reset counters
+        self._anonymous_filtered_count = 0
+        
         if self._stop_flag:
             return []
         
         # Step 1: Extract comments with focus
         comments = self.extract_groups_comments()
         
-        # Step 2: Resolve UIDs cho những comment chưa có UID (nếu resolve_uid=True)
+        # Step 2: Filter out anonymous users BEFORE UID resolution
+        if comments:
+            print(f"\n🚫 Filtering anonymous users from {len(comments)} comments...")
+            filtered_comments = []
+            anonymous_count = 0
+            
+            for comment in comments:
+                if comment.get('Name') == "Unknown":
+                    continue
+                    
+                if is_anonymous_user(comment['Name']):
+                    anonymous_count += 1
+                    print(f"  🚫 Filtered anonymous: {comment['Name']}")
+                    continue
+                    
+                filtered_comments.append(comment)
+            
+            # Store count for statistics
+            self._anonymous_filtered_count = anonymous_count
+            
+            print(f"  📊 Filtered out {anonymous_count} anonymous users")
+            print(f"  ✅ Remaining: {len(filtered_comments)} real users")
+            comments = filtered_comments
+        
+        # Step 3: Resolve UIDs cho những comment hợp lệ chưa có UID (nếu resolve_uid=True)
         if resolve_uid and comments:
-            print(f"\n🔄 Resolving UIDs for {len(comments)} comments...")
+            print(f"\n🔄 Resolving UIDs for {len(comments)} real users...")
             for i, comment in enumerate(comments):
                 if self._stop_flag:
                     break
@@ -1267,18 +1295,19 @@ class FacebookGroupsScraper:
                 if progress_callback and i % 5 == 0:
                     progress_callback(len(comments))
         
-        # Step 3: Apply limit
+        # Step 4: Apply limit
         if limit > 0 and len(comments) > limit:
             comments = comments[:limit]
             print(f"📊 Limited to {limit} comments")
         
-        # Step 4: Progress reporting
+        # Step 5: Progress reporting
         if progress_callback:
             progress_callback(len(comments))
         
         # Statistics
         uid_count = len([c for c in comments if c.get('UID', 'Unknown') != 'Unknown'])
-        print(f"✅ FOCUSED scraping completed: {len(comments)} comments extracted | {uid_count} UIDs resolved")
+        anonymous_filtered = self._anonymous_filtered_count
+        print(f"✅ FOCUSED scraping completed: {len(comments)} real user comments extracted | {uid_count} UIDs resolved | {anonymous_filtered} anonymous users filtered")
         return comments
 
     def close(self):
@@ -1650,16 +1679,17 @@ class FBGroupsAppGUI:
                 profile_links = len([c for c in comments if c['ProfileLink']])
                 uid_count = len([c for c in comments if c.get('UID', 'Unknown') != 'Unknown'])
                 uid_success_rate = (uid_count / len(comments)) * 100 if comments else 0
+                anonymous_filtered = getattr(self.scraper, '_anonymous_filtered_count', 0)
                 
                 self.lbl_status.config(text=f"🎉 ENHANCED UID + ANONYMOUS FILTER SCRAPING HOÀN THÀNH!", fg="#28a745")
-                self.lbl_progress_detail.config(text=f"📊 Results: {len(comments)} comments | {unique_users} users | {profile_links} links | {uid_count} UIDs ({uid_success_rate:.1f}%) | 🚫 Anonymous filtered | Layout: {layout}")
+                self.lbl_progress_detail.config(text=f"📊 Results: {len(comments)} real users | {uid_count} UIDs ({uid_success_rate:.1f}%) | 🚫 {anonymous_filtered} anonymous filtered | Layout: {layout}")
                 
                 print(f"🎯 ENHANCED UID + ANONYMOUS FILTER SCRAPING COMPLETE!")
-                print(f"   📊 Results: {len(comments)} total comments (anonymous users filtered out)")
+                print(f"   📊 Results: {len(comments)} real user comments")
                 print(f"   👥 Unique users: {unique_users}")
                 print(f"   🔗 Profile links: {profile_links}")
                 print(f"   🆔 UIDs extracted: {uid_count} ({uid_success_rate:.1f}% success rate)")
-                print(f"   🚫 Anonymous users: Automatically filtered out")
+                print(f"   🚫 Anonymous users filtered: {anonymous_filtered}")
                 print(f"   📱 Layout used: {layout}")
                 print(f"   💾 Saved to: {file_out}")
                 
