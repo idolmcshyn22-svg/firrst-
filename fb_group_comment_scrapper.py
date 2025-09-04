@@ -838,58 +838,70 @@ class FacebookGroupsScraper:
             post_link = ""
             post_uid = "Unknown"
             
-            # FOCUSED: Enhanced username extraction
+            # FOCUSED: Enhanced username extraction with click functionality
             print(f"    🎯 FOCUSED analysis of element structure...")
             
-            # Method 1: Get ALL links and analyze each one
-            try:
-                all_links = element.find_elements(By.XPATH, ".//a")
-                print(f"    Found {len(all_links)} total links in element")
-                
-                for link_index, link in enumerate(all_links):
-                    try:
-                        link_text = link.text.strip()
-                        link_href = link.get_attribute("href") or ""
-                        
-                        print(f"      Link {link_index+1}: Text='{link_text}' | Href={link_href[:60]}...")
-                        
-                        # Check if this is a Facebook profile link
-                        if ('facebook.com' in link_href and 
-                            ('profile.php' in link_href or '/user/' in link_href or 'user.php' in link_href)):
+            # Method 1: Click on user name to get profile info and UID
+            print(f"    👤 Attempting to click user name for UID extraction...")
+            profile_click_info = self.click_name_and_extract_uid(element)
+            clicked_profile_url = profile_click_info.get("ClickedURL", "")
+            
+            if profile_click_info["UID"] != "Unknown":
+                username = profile_click_info["NameText"]
+                profile_href = profile_click_info["ProfileLink"] or profile_click_info["ClickedURL"]
+                uid = profile_click_info["UID"]
+                print(f"      ✅ Successfully extracted via name click: {username} -> UID: {uid}")
+            else:
+                # Fallback: Traditional link analysis if click method failed
+                print(f"    🔄 Click method failed, falling back to traditional link analysis...")
+                try:
+                    all_links = element.find_elements(By.XPATH, ".//a")
+                    print(f"    Found {len(all_links)} total links in element")
+                    
+                    for link_index, link in enumerate(all_links):
+                        try:
+                            link_text = link.text.strip()
+                            link_href = link.get_attribute("href") or ""
                             
-                            # Enhanced name validation
-                            if (link_text and 
-                                len(link_text) >= 2 and 
-                                len(link_text) <= 100 and
-                                not link_text.isdigit() and
-                                not link_text.startswith('http') and
-                                not any(ui in link_text.lower() for ui in [
-                                    'like', 'reply', 'share', 'comment', 'thích', 'trả lời', 
-                                    'chia sẻ', 'bình luận', 'ago', 'trước', 'min', 'hour', 
-                                    'day', 'phút', 'giờ', 'ngày', 'ẩn danh', 'anonymous',
-                                    'view', 'xem', 'show', 'hiển thị', 'see more', 'view more'
-                                ])):
+                            print(f"      Link {link_index+1}: Text='{link_text}' | Href={link_href[:60]}...")
+                            
+                            # Check if this is a Facebook profile link
+                            if ('facebook.com' in link_href and 
+                                ('profile.php' in link_href or '/user/' in link_href or 'user.php' in link_href)):
                                 
-                                username = link_text
-                                profile_href = link_href
-                                
-                                # Extract UID from URL
-                                uid_patterns = [
-                                    r'profile\.php\?id=(\d+)',
-                                    r'user\.php\?id=(\d+)',
-                                    r'/user/(\d+)',
-                                    r'id=(\d+)',
-                                    r'(\d{10,})'  # Facebook UIDs are usually 10+ digits
-                                ]
-                                
-                                for pattern in uid_patterns:
-                                    uid_match = re.search(pattern, link_href)
-                                    if uid_match:
-                                        uid = uid_match.group(1)
-                                        break
-                                
-                                print(f"      ✅ FOCUSED: Found valid profile: {username} -> UID: {uid}")
-                                break
+                                # Enhanced name validation
+                                if (link_text and 
+                                    len(link_text) >= 2 and 
+                                    len(link_text) <= 100 and
+                                    not link_text.isdigit() and
+                                    not link_text.startswith('http') and
+                                    not any(ui in link_text.lower() for ui in [
+                                        'like', 'reply', 'share', 'comment', 'thích', 'trả lời', 
+                                        'chia sẻ', 'bình luận', 'ago', 'trước', 'min', 'hour', 
+                                        'day', 'phút', 'giờ', 'ngày', 'ẩn danh', 'anonymous',
+                                        'view', 'xem', 'show', 'hiển thị', 'see more', 'view more'
+                                    ])):
+                                    
+                                    username = link_text
+                                    profile_href = link_href
+                                    
+                                    # Extract UID from URL
+                                    uid_patterns = [
+                                        r'profile\.php\?id=(\d+)',
+                                        r'user\.php\?id=(\d+)',
+                                        r'/user/(\d+)',
+                                        r'id=(\d+)',
+                                        r'(\d{10,})'  # Facebook UIDs are usually 10+ digits
+                                    ]
+                                    
+                                    for pattern in uid_patterns:
+                                        uid_match = re.search(pattern, link_href)
+                                        if uid_match:
+                                            uid = uid_match.group(1)
+                                            break
+                                    
+                                    print(f"      ✅ FOCUSED: Found valid profile: {username} -> UID: {uid}")
+                                    break
                         
                         # Check if this is a Facebook post time link
                         elif ('facebook.com' in link_href and 
@@ -920,12 +932,12 @@ class FacebookGroupsScraper:
                                 print(f"      ✅ FOCUSED: Found post time link: {link_text} -> Post UID: {post_uid}")
                                 print(f"      📝 Post Link: {post_link[:80]}...")
                                 
-                    except Exception as e:
-                        print(f"      Error processing link {link_index+1}: {e}")
-                        continue
-                
-            except Exception as e:
-                print(f"    Error in focused method: {e}")
+                        except Exception as e:
+                            print(f"      Error processing link {link_index+1}: {e}")
+                            continue
+                    
+                except Exception as e:
+                    print(f"    Error in fallback method: {e}")
             
             # Fallback: If no username from links, try using the first line of the first child element's text
             if username == "Unknown":
@@ -965,6 +977,7 @@ class FacebookGroupsScraper:
                 "PostLink": final_post_link,
                 "PostUID": final_post_uid,
                 "TimeText": post_info.get("TimeText", ""),
+                "ClickedProfileURL": clicked_profile_url,
                 "ElementIndex": index,
                 "TextPreview": full_text[:100] + "..." if len(full_text) > 100 else full_text,
                 "ContainerHeight": "Focused on larger height container"
@@ -1064,6 +1077,264 @@ class FacebookGroupsScraper:
         except Exception as e:
             print(f"Error in click_time_element_and_extract_info: {e}")
             return {"PostLink": "", "PostUID": "Unknown", "TimeText": ""}
+
+    def click_name_and_extract_uid(self, element):
+        """Click on user name to get profile link and extract UID"""
+        try:
+            print("👤 Searching for clickable user name elements...")
+            
+            # Find clickable name elements within the comment element
+            name_selectors = [
+                # Look for profile links
+                ".//a[contains(@href, 'facebook.com') and (contains(@href, 'profile.php') or contains(@href, '/user/') or contains(@href, 'user.php'))]",
+                # Look for any Facebook profile links
+                ".//a[contains(@href, 'facebook.com') and not(contains(@href, 'posts/')) and not(contains(@href, 'photo')) and not(contains(@href, 'video'))]",
+                # Look for links that might be usernames
+                ".//a[@role='link' and contains(@href, 'facebook.com')]"
+            ]
+            
+            profile_info = {
+                "ProfileLink": "",
+                "UID": "Unknown",
+                "NameText": "",
+                "ClickedURL": ""
+            }
+            
+            for selector in name_selectors:
+                try:
+                    name_links = element.find_elements(By.XPATH, selector)
+                    
+                    for name_link in name_links:
+                        try:
+                            link_text = name_link.text.strip()
+                            link_href = name_link.get_attribute("href") or ""
+                            
+                            # Check if this looks like a user name (not UI elements)
+                            ui_keywords = ['like', 'reply', 'share', 'comment', 'thích', 'trả lời', 
+                                         'chia sẻ', 'bình luận', 'ago', 'trước', 'min', 'hour', 
+                                         'day', 'phút', 'giờ', 'ngày', 'view', 'xem', 'show', 'see more']
+                            
+                            if (link_text and 
+                                len(link_text) >= 2 and 
+                                len(link_text) <= 100 and
+                                not link_text.isdigit() and
+                                not link_text.startswith('http') and
+                                not any(ui in link_text.lower() for ui in ui_keywords)):
+                                
+                                # This looks like a user name, let's click it
+                                print(f"      🖱️ Clicking on name: '{link_text}'")
+                                
+                                try:
+                                    # Click the name element
+                                    self.driver.execute_script("arguments[0].click();", name_link)
+                                    time.sleep(3)  # Wait for navigation
+                                    
+                                    # Get the new URL after clicking
+                                    clicked_url = self.driver.current_url
+                                    print(f"      🌐 Clicked URL: {clicked_url[:80]}...")
+                                    
+                                    profile_info["ClickedURL"] = clicked_url
+                                    profile_info["NameText"] = link_text
+                                    profile_info["ProfileLink"] = link_href  # Original href
+                                    
+                                    # Extract UID from the clicked URL using enhanced method
+                                    extracted_uid = self.extract_uid_from_any_link(clicked_url)
+                                    if extracted_uid != "Unknown":
+                                        profile_info["UID"] = extracted_uid
+                                    else:
+                                        # Try original href as fallback
+                                        extracted_uid = self.extract_uid_from_any_link(link_href)
+                                        if extracted_uid != "Unknown":
+                                            profile_info["UID"] = extracted_uid
+                                    
+                                    print(f"      ✅ Extracted UID from clicked URL: {profile_info['UID']}")
+                                    
+                                    # Navigate back to continue processing
+                                    self.driver.back()
+                                    time.sleep(2)
+                                    
+                                    return profile_info
+                                    
+                                except Exception as click_error:
+                                    print(f"      ⚠️ Could not click name element: {click_error}")
+                                    # Still try to extract from original href
+                                    profile_info["ProfileLink"] = link_href
+                                    profile_info["NameText"] = link_text
+                                    
+                                    # Extract UID from original href using enhanced method
+                                    extracted_uid = self.extract_uid_from_any_link(link_href)
+                                    if extracted_uid != "Unknown":
+                                        profile_info["UID"] = extracted_uid
+                                    
+                                    return profile_info
+                                
+                        except Exception as link_error:
+                            print(f"      Error processing name link: {link_error}")
+                            continue
+                            
+                except Exception as selector_error:
+                    print(f"    Error with selector {selector}: {selector_error}")
+                    continue
+            
+            return profile_info
+            
+        except Exception as e:
+            print(f"Error in click_name_and_extract_uid: {e}")
+            return {"ProfileLink": "", "UID": "Unknown", "NameText": "", "ClickedURL": ""}
+
+    def convert_username_to_uid(self, username_or_url):
+        """Convert Facebook username/URL to UID by making a request"""
+        try:
+            print(f"🔄 Converting '{username_or_url}' to UID...")
+            
+            # Determine if input is a URL or username
+            if username_or_url.startswith('http'):
+                profile_url = username_or_url
+                # Extract username from URL for logging
+                username_match = re.search(r'facebook\.com/([^/?]+)', username_or_url)
+                display_name = username_match.group(1) if username_match else "URL"
+            else:
+                profile_url = f"https://www.facebook.com/{username_or_url}"
+                display_name = username_or_url
+            
+            # Use requests with cookies to get the profile page
+            if hasattr(self, 'cookies_dict') and self.cookies_dict:
+                headers = {
+                    'User-Agent': 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/120.0.0.0 Safari/537.36',
+                    'Accept': 'text/html,application/xhtml+xml,application/xml;q=0.9,image/webp,*/*;q=0.8',
+                    'Accept-Language': 'en-US,en;q=0.5',
+                    'Accept-Encoding': 'gzip, deflate',
+                    'Connection': 'keep-alive',
+                    'Upgrade-Insecure-Requests': '1',
+                }
+                
+                try:
+                    response = requests.get(profile_url, cookies=self.cookies_dict, headers=headers, timeout=15)
+                    
+                    # Look for UID patterns in the response
+                    uid_patterns = [
+                        r'"profile_id":"(\d+)"',
+                        r'"userID":"(\d+)"',
+                        r'"user_id":"(\d+)"',
+                        r'"entity_id":"(\d+)"',
+                        r'profile\.php\?id=(\d+)',
+                        r'"id":(\d{10,})',
+                        r'entity_id=(\d+)',
+                        r'"target_id":"(\d+)"',
+                        r'"owner_id":"(\d+)"',
+                        r'"profile_owner":"(\d+)"',
+                        r'data-profileid="(\d+)"',
+                        r'profileid=(\d+)',
+                        # Look in JSON data structures
+                        r'"__isProfile":"(\d+)"',
+                        r'"profile":{"id":"(\d+)"',
+                    ]
+                    
+                    for pattern in uid_patterns:
+                        uid_matches = re.findall(pattern, response.text)
+                        if uid_matches:
+                            # Take the first valid UID (10+ digits)
+                            for uid in uid_matches:
+                                if len(uid) >= 10:
+                                    print(f"      ✅ Converted '{display_name}' to UID: {uid}")
+                                    return uid
+                            
+                except Exception as req_error:
+                    print(f"      ⚠️ Request error: {req_error}")
+            
+            # Fallback: try with Selenium
+            try:
+                current_url = self.driver.current_url
+                self.driver.get(profile_url)
+                time.sleep(3)
+                
+                # Check if redirected to profile.php?id=
+                final_url = self.driver.current_url
+                uid_match = re.search(r'profile\.php\?id=(\d+)', final_url)
+                if uid_match:
+                    uid = uid_match.group(1)
+                    print(f"      ✅ Converted '{display_name}' to UID via redirect: {uid}")
+                    # Go back to original page
+                    self.driver.get(current_url)
+                    time.sleep(2)
+                    return uid
+                
+                # Try to find UID in page source
+                page_source = self.driver.page_source
+                uid_patterns = [
+                    r'"profile_id":"(\d+)"',
+                    r'"userID":"(\d+)"',
+                    r'"user_id":"(\d+)"',
+                    r'"entity_id":"(\d+)"',
+                    r'data-profileid="(\d+)"'
+                ]
+                
+                for pattern in uid_patterns:
+                    uid_matches = re.findall(pattern, page_source)
+                    if uid_matches:
+                        for uid in uid_matches:
+                            if len(uid) >= 10:
+                                print(f"      ✅ Found UID in page source: {uid}")
+                                # Go back to original page
+                                self.driver.get(current_url)
+                                time.sleep(2)
+                                return uid
+                
+                # Go back to original page
+                self.driver.get(current_url)
+                time.sleep(2)
+                
+            except Exception as selenium_error:
+                print(f"      ⚠️ Selenium conversion error: {selenium_error}")
+            
+            return "Unknown"
+            
+        except Exception as e:
+            print(f"Error converting username to UID: {e}")
+            return "Unknown"
+
+    def extract_uid_from_any_link(self, link_url):
+        """Extract UID from any type of Facebook link"""
+        try:
+            print(f"🔍 Analyzing link for UID extraction: {link_url[:80]}...")
+            
+            # Direct UID patterns in URL
+            direct_uid_patterns = [
+                r'profile\.php\?id=(\d+)',        # profile.php?id=123456789
+                r'user\.php\?id=(\d+)',           # user.php?id=123456789
+                r'/user/(\d+)',                   # /user/123456789
+                r'id=(\d+)',                      # id=123456789
+                r'/(\d{10,})(?:[/?]|$)',          # Direct UID in path (10+ digits)
+                r'u=(\d+)',                       # u=123456789
+                r'profile_id=(\d+)',              # profile_id=123456789
+                r'entity_id=(\d+)',               # entity_id=123456789
+            ]
+            
+            # Try direct extraction from URL first
+            for pattern in direct_uid_patterns:
+                uid_match = re.search(pattern, link_url)
+                if uid_match:
+                    uid = uid_match.group(1)
+                    if len(uid) >= 10:  # Facebook UIDs are typically 10+ digits
+                        print(f"      ✅ Direct UID extraction: {uid}")
+                        return uid
+            
+            # If no direct UID found, try username conversion
+            username_match = re.search(r'facebook\.com/([^/?]+)', link_url)
+            if username_match:
+                username = username_match.group(1)
+                # Skip common non-username paths
+                skip_paths = ['profile', 'user', 'photo', 'video', 'posts', 'groups', 'pages', 'events']
+                if username.lower() not in skip_paths and not username.isdigit():
+                    print(f"      🔄 Found username '{username}', converting to UID...")
+                    return self.convert_username_to_uid(username)
+            
+            print(f"      ❌ Could not extract UID from link")
+            return "Unknown"
+            
+        except Exception as e:
+            print(f"Error extracting UID from link: {e}")
+            return "Unknown"
 
     def scrape_all_comments(self, limit=0, resolve_uid=True, progress_callback=None):
         """Main scraping orchestrator with FOCUSED approach"""
