@@ -235,11 +235,11 @@ def extract_uid_from_profile_url(profile_url):
 
 def get_uid_from_username(username, cookies_dict=None, driver=None):
     """
-    Lấy UID Facebook từ username
+    OPTIMIZED: Lấy UID Facebook từ username với performance improvements
     Args:
-        username (str): Username Facebook (có thể có hoặc không có facebook.com/)
-        cookies_dict (dict): Dictionary cookies để authenticate
-        driver: Selenium WebDriver instance (optional, để sử dụng session hiện tại)
+        username (str): Username Facebook
+        cookies_dict (dict): Dictionary cookies để authenticate  
+        driver: Selenium WebDriver instance (optional)
     Returns:
         str: UID Facebook hoặc "Unknown" nếu không tìm thấy
     """
@@ -250,77 +250,64 @@ def get_uid_from_username(username, cookies_dict=None, driver=None):
         # Chuẩn hóa username
         clean_username = username.strip()
         if clean_username.startswith('https://'):
-            # Nếu là URL đầy đủ, extract username
             if 'facebook.com/' in clean_username:
                 clean_username = clean_username.split('facebook.com/')[-1].split('?')[0].split('/')[0]
         
-        print(f"  🔍 Attempting to get UID for username: {clean_username}")
+        print(f"  🔍 OPTIMIZED UID resolution for: {clean_username}")
         
-        # Method 1: Sử dụng Selenium driver nếu có sẵn (nhanh hơn và đáng tin cậy hơn)
+        # OPTIMIZED Method 1: Sử dụng Selenium (nhưng nhanh hơn)
         if driver:
             try:
-                print(f"    🌐 Using Selenium driver to resolve UID...")
+                print(f"    ⚡ Fast Selenium resolve...")
                 
-                # Tạo URL profile
                 profile_url = f"https://www.facebook.com/{clean_username}"
-                
-                # Lưu current URL để restore sau
                 current_url = driver.current_url
                 
-                # Navigate to profile
+                # Navigate to profile với timeout ngắn hơn
                 driver.get(profile_url)
-                time.sleep(3)
+                time.sleep(1.5)  # Giảm từ 3s xuống 1.5s
                 
-                # Check if redirected to profile.php?id= format
                 final_url = driver.current_url
-                print(f"    📍 Final URL: {final_url}")
+                print(f"    📍 Final URL: {final_url[:80]}...")
                 
                 # Extract UID from final URL
                 uid_match = re.search(r'profile\.php\?id=(\d+)', final_url)
                 if uid_match:
                     uid = uid_match.group(1)
-                    print(f"    ✅ Found UID via Selenium: {uid}")
+                    print(f"    ✅ Fast UID via URL: {uid}")
                     
-                    # Restore original URL
+                    # Quick restore
                     driver.get(current_url)
-                    time.sleep(2)
-                    
+                    time.sleep(0.5)  # Giảm từ 2s xuống 0.5s
                     return uid
                 
-                # Tìm UID trong page source
+                # Quick page source scan (chỉ scan patterns quan trọng nhất)
                 page_source = driver.page_source
-                uid_patterns = [
+                quick_patterns = [
                     r'"entity_id":"(\d+)"',
                     r'"userID":"(\d+)"',
-                    r'"user_id":"(\d+)"',
-                    r'"profile_id":"(\d+)"',
-                    r'"actorID":"(\d+)"',
-                    r'"pageID":"(\d+)"'
+                    r'"profile_id":"(\d+)"'
                 ]
                 
-                for pattern in uid_patterns:
+                for pattern in quick_patterns:
                     matches = re.findall(pattern, page_source)
                     if matches:
                         uid = matches[0]
                         if len(uid) >= 10:
-                            print(f"    ✅ Found UID in page source: {uid}")
-                            
-                            # Restore original URL
+                            print(f"    ✅ Fast UID via source: {uid}")
                             driver.get(current_url)
-                            time.sleep(2)
-                            
+                            time.sleep(0.5)
                             return uid
                 
-                # Restore original URL
+                # Quick restore
                 driver.get(current_url)
-                time.sleep(2)
+                time.sleep(0.5)
                 
             except Exception as e:
-                print(f"    ⚠️ Selenium method failed: {e}")
-                # Restore original URL nếu có lỗi
+                print(f"    ⚠️ Fast Selenium failed: {e}")
                 try:
                     driver.get(current_url)
-                    time.sleep(1)
+                    time.sleep(0.5)
                 except:
                     pass
         
@@ -1066,16 +1053,17 @@ class FacebookGroupsScraper:
                         print(f"Found next div after parent_with_html_div")
                         print(f"Next div class: {next_div.get_attribute('class')}")
                         
-                        # IMPROVED click loop với fresh container re-finding
-                        print("🔄 Starting improved 'View more comments' click loop...")
+                        # OPTIMIZED click loop với performance improvements
+                        print("🚀 Starting optimized 'View more comments' click loop...")
                         previous_comment_count = 0
                         no_new_comments_count = 0
-                        max_no_new_comments = 3
+                        max_no_new_comments = 2  # Giảm từ 3 xuống 2
+                        max_click_rounds = 10  # Giới hạn tối đa 10 rounds
                         click_round = 0
                         
-                        while no_new_comments_count < max_no_new_comments:
+                        while no_new_comments_count < max_no_new_comments and click_round < max_click_rounds:
                             click_round += 1
-                            print(f"\n--- Click Round {click_round} ---")
+                            print(f"\n--- Click Round {click_round}/{max_click_rounds} ---")
                             
                             # Look for "View more comments" button
                             view_more_selectors = [
@@ -1113,9 +1101,9 @@ class FacebookGroupsScraper:
                                 print(f"⚠️ No new comments button detected ({no_new_comments_count}/{max_no_new_comments})")
                                 break
                             
-                            # Wait for new comments to load
-                            print("⏳ Waiting 5 seconds for new comments to load...")
-                            time.sleep(5)
+                            # Wait for new comments to load (optimized)
+                            print("⏳ Waiting 3 seconds for new comments to load...")
+                            time.sleep(3)  # Giảm từ 5s xuống 3s
                             
                             # RE-FIND fresh container và extract immediately
                             processed_in_this_round = 0
@@ -1132,8 +1120,8 @@ class FacebookGroupsScraper:
                                 for child_index, child in enumerate(fresh_children):
                                     if self.is_comment_div(child):
                                         try:
-                                            # IMMEDIATE extraction
-                                            comment_data = self.extract_comment_data_focused(child, len(all_comments_data))
+                                            # FAST extraction (skip UID resolution trong immediate processing)
+                                            comment_data = self.extract_comment_data_fast(child, len(all_comments_data))
                                             
                                             if comment_data:
                                                 # Check anonymous và duplicates ngay
@@ -1170,7 +1158,7 @@ class FacebookGroupsScraper:
                                     
                                     for elem in global_elements[-10:]:  # Process last 10 (likely new ones)
                                         try:
-                                            comment_data = self.extract_comment_data_focused(elem, len(all_comments_data))
+                                            comment_data = self.extract_comment_data_fast(elem, len(all_comments_data))
                                             if comment_data and comment_data['Name'] != "Unknown":
                                                 if not is_anonymous_user(comment_data['Name']):
                                                     content_signature = f"{comment_data['Name']}_{comment_data['ProfileLink']}"
@@ -1201,6 +1189,12 @@ class FacebookGroupsScraper:
                             else:
                                 no_new_comments_count += 1
                                 print(f"⚠️ No progress in round {click_round} ({no_new_comments_count}/{max_no_new_comments})")
+                            
+                            # EARLY EXIT: Dynamic based on performance
+                            early_exit_threshold = 30 if click_round > 5 else 50  # Giảm threshold sau 5 rounds
+                            if len(all_comments_data) >= early_exit_threshold:
+                                print(f"🎯 Early exit: Đã có {len(all_comments_data)} comments (threshold: {early_exit_threshold})")
+                                break
                             
                             # Check for stop flag
                             if self._stop_flag:
@@ -1553,6 +1547,132 @@ class FacebookGroupsScraper:
             print(f"Error in focused extraction: {e}")
             return None
 
+    def extract_comment_data_fast(self, element, index):
+        """FAST comment data extraction WITHOUT UID resolution (for immediate processing)"""
+        try:
+            # Safe text extraction
+            full_text = safe_get_element_text(element)
+            if len(full_text) < 5:
+                return None
+            
+            username = "Unknown"
+            profile_href = ""
+            
+            # FAST: Enhanced username extraction WITHOUT UID resolution
+            try:
+                all_links = safe_find_elements(element, By.XPATH, ".//a")
+                
+                for link in all_links:
+                    try:
+                        link_text = safe_get_element_text(link)
+                        link_href = safe_get_element_attribute(link, "href")
+                        
+                        # Check if this is a Facebook profile link
+                        if ('facebook.com' in link_href and 
+                            ('profile.php' in link_href or '/user/' in link_href or 'user.php' in link_href or 
+                             (not any(x in link_href for x in ['groups', 'pages', 'events', 'photo', 'video'])))):
+                            
+                            # Enhanced name validation với anonymous filter
+                            if (link_text and 
+                                len(link_text) >= 2 and 
+                                len(link_text) <= 100 and
+                                not link_text.isdigit() and
+                                not link_text.startswith('http') and
+                                not is_anonymous_user(link_text) and  # 🚫 BỎ QUA NGƯỜI DÙNG ẨN DANH
+                                not any(ui in link_text.lower() for ui in [
+                                    'like', 'reply', 'share', 'comment', 'thích', 'trả lời', 
+                                    'chia sẻ', 'bình luận', 'ago', 'trước', 'min', 'hour', 
+                                    'day', 'phút', 'giờ', 'ngày', 
+                                    'view', 'xem', 'show', 'hiển thị', 'see more', 'view more'
+                                ])):
+                                
+                                username = link_text
+                                profile_href = link_href
+                                break
+                                
+                    except Exception as e:
+                        continue
+                
+            except Exception as e:
+                pass
+            
+            # Fallback: First child text (without UID resolution)
+            if username == "Unknown":
+                try:
+                    children = safe_find_elements(element, By.XPATH, "./*")
+                    if children:
+                        first_child_text = safe_get_element_text(children[0])
+                        if first_child_text:
+                            first_line = first_child_text.splitlines()[0].strip()
+                            if (first_line and 
+                                2 <= len(first_line) <= 120 and 
+                                not first_line.startswith("http") and
+                                not is_anonymous_user(first_line)):
+                                
+                                username = first_line
+                                
+                except Exception as e:
+                    pass
+
+            # Final validation
+            if username == "Unknown":
+                return None
+                
+            return {
+                "UID": "Unknown",  # Will be resolved later in batch
+                "Name": username,
+                "ProfileLink": profile_href,
+                "CommentLink": "",
+                "ElementIndex": index,
+                "TextPreview": full_text[:100] + "..." if len(full_text) > 100 else full_text,
+                "ContainerHeight": "Fast extraction"
+            }
+            
+        except Exception as e:
+            return None
+
+    def batch_resolve_uids(self, comments, max_network_resolves=10):
+        """
+        OPTIMIZED: Batch resolve UIDs với giới hạn network calls
+        Args:
+            comments (list): List of comments
+            max_network_resolves (int): Max số lượng network calls
+        Returns:
+            int: Số UIDs resolved
+        """
+        print(f"🚀 BATCH UID resolution for {len(comments)} comments...")
+        uid_resolved_count = 0
+        network_resolves_used = 0
+        
+        # Phase 1: Fast URL-based resolution (no network)
+        for comment in comments:
+            if comment.get('UID') == "Unknown" and comment.get('ProfileLink'):
+                fast_uid = extract_uid_from_profile_url(comment['ProfileLink'])
+                if fast_uid != "Unknown" and not fast_uid.startswith("username:"):
+                    comment['UID'] = fast_uid
+                    uid_resolved_count += 1
+        
+        print(f"⚡ Phase 1: {uid_resolved_count} UIDs từ URLs")
+        
+        # Phase 2: Limited network resolution cho important cases
+        if network_resolves_used < max_network_resolves:
+            for comment in comments:
+                if network_resolves_used >= max_network_resolves:
+                    break
+                    
+                if comment.get('UID') == "Unknown" and comment.get('Name') != "Unknown":
+                    # Chỉ resolve network cho users có profile link
+                    if comment.get('ProfileLink'):
+                        resolved_uid = get_uid_from_username(comment['Name'], self.cookies_dict, self.driver)
+                        if resolved_uid != "Unknown":
+                            comment['UID'] = resolved_uid
+                            uid_resolved_count += 1
+                            network_resolves_used += 1
+                            print(f"  🌐 Network UID #{network_resolves_used}: {comment['Name']} -> {resolved_uid}")
+        
+        print(f"🎯 BATCH completed: {uid_resolved_count} total UIDs | {network_resolves_used} network calls")
+        return uid_resolved_count
+
     def scrape_all_comments(self, limit=0, resolve_uid=True, progress_callback=None):
         """Main scraping orchestrator with FOCUSED approach"""
         print(f"=== STARTING FOCUSED GROUPS SCRAPING ===")
@@ -1590,25 +1710,9 @@ class FacebookGroupsScraper:
             print(f"  ✅ Remaining: {len(filtered_comments)} real users")
             comments = filtered_comments
         
-        # Step 3: Resolve UIDs cho những comment hợp lệ chưa có UID (nếu resolve_uid=True)
+        # Step 3: OPTIMIZED UID resolution với batch processing
         if resolve_uid and comments:
-            print(f"\n🔄 Resolving UIDs for {len(comments)} real users...")
-            for i, comment in enumerate(comments):
-                if self._stop_flag:
-                    break
-                    
-                if comment.get('UID') == "Unknown" and comment.get('Name') != "Unknown":
-                    print(f"  🔍 Resolving UID for: {comment['Name']}")
-                    resolved_uid = get_uid_from_username(comment['Name'], self.cookies_dict, self.driver)
-                    if resolved_uid != "Unknown":
-                        comment['UID'] = resolved_uid
-                        print(f"    ✅ Resolved UID: {resolved_uid}")
-                    else:
-                        print(f"    ⚠️ Could not resolve UID for: {comment['Name']}")
-                
-                # Update progress
-                if progress_callback and i % 5 == 0:
-                    progress_callback(len(comments))
+            uid_resolved_count = self.batch_resolve_uids(comments, max_network_resolves=5)  # Giới hạn 5 network calls
         
         # Step 4: Apply limit
         if limit > 0 and len(comments) > limit:
@@ -1622,7 +1726,8 @@ class FacebookGroupsScraper:
         # Statistics
         uid_count = len([c for c in comments if c.get('UID', 'Unknown') != 'Unknown'])
         anonymous_filtered = self._anonymous_filtered_count
-        print(f"✅ FOCUSED scraping completed: {len(comments)} real user comments extracted | {uid_count} UIDs resolved | {anonymous_filtered} anonymous users filtered")
+        uid_rate = (uid_count / len(comments)) * 100 if comments else 0
+        print(f"✅ OPTIMIZED scraping completed: {len(comments)} real users | {uid_count} UIDs ({uid_rate:.1f}%) | {anonymous_filtered} anonymous filtered")
         return comments
 
     def close(self):
@@ -1690,13 +1795,18 @@ class FBGroupsAppGUI:
         tk.Checkbutton(opt_grid, text="👻 Chạy ẩn", variable=self.headless_var,
                       bg="#121212", font=("Arial", 9)).grid(row=1, column=0, sticky="w", pady=(10,0))
 
-        self.resolve_uid_var = tk.BooleanVar(value=True)
-        tk.Checkbutton(opt_grid, text="🆔 Lấy UID từ username", variable=self.resolve_uid_var, 
+        self.resolve_uid_var = tk.BooleanVar(value=False)  # Default False cho speed
+        tk.Checkbutton(opt_grid, text="🆔 Lấy UID từ username (chậm hơn)", variable=self.resolve_uid_var, 
                       bg="#121212", font=("Arial", 9)).grid(row=1, column=1, sticky="w", pady=(10,0))
+
+        # Speed mode option
+        self.speed_mode_var = tk.BooleanVar(value=True)
+        tk.Checkbutton(opt_grid, text="⚡ Speed mode (giới hạn 50 comments)", variable=self.speed_mode_var,
+                      bg="#121212", font=("Arial", 9)).grid(row=2, column=0, sticky="w", pady=(5,0))
 
         # Thêm note về anonymous filter
         tk.Label(opt_grid, text="🚫 Tự động bỏ qua người dùng ẩn danh", bg="#121212", fg="#ffc107", 
-                font=("Arial", 9, "italic")).grid(row=2, column=0, columnspan=3, sticky="w", pady=(5,0))
+                font=("Arial", 9, "italic")).grid(row=3, column=0, columnspan=3, sticky="w", pady=(5,0))
 
         # File section
         file_frame = tk.LabelFrame(main_frame, text="💾 Xuất kết quả", font=("Arial", 12, "bold"), 
@@ -1918,7 +2028,8 @@ class FBGroupsAppGUI:
 
         self._scrape_thread = threading.Thread(target=self._scrape_worker, 
                                              args=(url, cookie_str, file_out, limit, 
-                                                   self.headless_var.get(), self.resolve_uid_var.get()))
+                                                   self.headless_var.get(), self.resolve_uid_var.get(),
+                                                   self.speed_mode_var.get()))
         self._scrape_thread.daemon = True
         self._scrape_thread.start()
 
@@ -1934,7 +2045,7 @@ class FBGroupsAppGUI:
         self.lbl_status.config(text=f"📈 UID processing... Đã lấy {count} comments", fg="#28a745")
         self.root.update_idletasks()
 
-    def _scrape_worker(self, url, cookie_str, file_out, limit, headless, resolve_uid):
+    def _scrape_worker(self, url, cookie_str, file_out, limit, headless, resolve_uid, speed_mode=True):
         try:
             # Initialize
             self.lbl_status.config(text="🌐 Khởi tạo Enhanced UID Groups scraper...", fg="#fd7e14")
@@ -1959,13 +2070,36 @@ class FBGroupsAppGUI:
             if self._stop_flag: return
             
             # Scrape with Enhanced UID logic
-            self.lbl_status.config(text=f"🔍 Enhanced UID Groups extraction ({layout})...", fg="#fd7e14")
-            self.lbl_progress_detail.config(text="⏳ Extracting usernames and resolving to UIDs...")
+            mode_text = "⚡ SPEED MODE" if speed_mode else "🔍 FULL MODE"
+            self.lbl_status.config(text=f"{mode_text} Groups extraction ({layout})...", fg="#fd7e14")
             
-            comments = self.scraper.scrape_all_comments(limit=limit, resolve_uid=resolve_uid, 
+            if speed_mode:
+                self.lbl_progress_detail.config(text="⚡ Speed mode: Fast extraction, limited UID resolution...")
+                # Override settings cho speed mode
+                actual_limit = min(limit, 50) if limit > 0 else 50
+                actual_resolve_uid = False  # Disable UID resolution trong speed mode
+            else:
+                self.lbl_progress_detail.config(text="⏳ Full mode: Complete extraction với UID resolution...")
+                actual_limit = limit
+                actual_resolve_uid = resolve_uid
+            
+            comments = self.scraper.scrape_all_comments(limit=actual_limit, resolve_uid=actual_resolve_uid, 
                                                        progress_callback=self._progress_cb)
             
-            print(f"✅ Comments with UIDs: {comments}")
+            # SPEED MODE: Extract UIDs từ URLs có sẵn (không cần network)
+            if speed_mode and comments:
+                print(f"\n⚡ SPEED MODE: Fast UID extraction từ URLs...")
+                url_uid_count = 0
+                for comment in comments:
+                    if comment.get('UID') == "Unknown" and comment.get('ProfileLink'):
+                        fast_uid = extract_uid_from_profile_url(comment['ProfileLink'])
+                        if fast_uid != "Unknown" and not fast_uid.startswith("username:"):
+                            comment['UID'] = fast_uid
+                            url_uid_count += 1
+                
+                print(f"⚡ Speed UID extraction: {url_uid_count} UIDs từ URLs")
+            
+            print(f"✅ Comments: {len(comments)} | Speed mode: {speed_mode}")
 
             if self._stop_flag: return
             
@@ -1996,15 +2130,19 @@ class FBGroupsAppGUI:
                 uid_success_rate = (uid_count / len(comments)) * 100 if comments else 0
                 anonymous_filtered = getattr(self.scraper, '_anonymous_filtered_count', 0)
                 
-                self.lbl_status.config(text=f"🎉 ENHANCED UID + ANONYMOUS FILTER SCRAPING HOÀN THÀNH!", fg="#28a745")
-                self.lbl_progress_detail.config(text=f"📊 Results: {len(comments)} real users | {uid_count} UIDs ({uid_success_rate:.1f}%) | 🚫 {anonymous_filtered} anonymous filtered | Layout: {layout}")
+                mode_emoji = "⚡" if speed_mode else "🔍"
+                mode_text = "SPEED MODE" if speed_mode else "FULL MODE"
                 
-                print(f"🎯 ENHANCED UID + ANONYMOUS FILTER SCRAPING COMPLETE!")
+                self.lbl_status.config(text=f"🎉 {mode_emoji} {mode_text} SCRAPING HOÀN THÀNH!", fg="#28a745")
+                self.lbl_progress_detail.config(text=f"📊 {mode_text}: {len(comments)} users | {uid_count} UIDs ({uid_success_rate:.1f}%) | 🚫 {anonymous_filtered} anonymous | {layout}")
+                
+                print(f"🎯 {mode_emoji} {mode_text} SCRAPING COMPLETE!")
                 print(f"   📊 Results: {len(comments)} real user comments")
                 print(f"   👥 Unique users: {unique_users}")
                 print(f"   🔗 Profile links: {profile_links}")
                 print(f"   🆔 UIDs extracted: {uid_count} ({uid_success_rate:.1f}% success rate)")
                 print(f"   🚫 Anonymous users filtered: {anonymous_filtered}")
+                print(f"   {mode_emoji} Mode: {mode_text}")
                 print(f"   📱 Layout used: {layout}")
                 print(f"   💾 Saved to: {file_out}")
                 
