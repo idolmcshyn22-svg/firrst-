@@ -835,6 +835,8 @@ class FacebookGroupsScraper:
             username = "Unknown"
             profile_href = ""
             uid = "Unknown"
+            post_link = ""
+            post_uid = "Unknown"
             
             # FOCUSED: Enhanced username extraction
             print(f"    🎯 FOCUSED analysis of element structure...")
@@ -888,6 +890,35 @@ class FacebookGroupsScraper:
                                 
                                 print(f"      ✅ FOCUSED: Found valid profile: {username} -> UID: {uid}")
                                 break
+                        
+                        # Check if this is a Facebook post time link
+                        elif ('facebook.com' in link_href and 
+                              ('posts/' in link_href or 'permalink' in link_href) and
+                              ('comment_id=' in link_href or '?' in link_href)):
+                            
+                            # Check if link text looks like time (e.g., "4 ngày", "2 hours", etc.)
+                            time_indicators = ['ngày', 'giờ', 'phút', 'giây', 'day', 'hour', 'minute', 'second', 'min', 'hr', 'h', 'm', 's']
+                            if (link_text and 
+                                any(indicator in link_text.lower() for indicator in time_indicators)):
+                                
+                                post_link = link_href
+                                
+                                # Extract post UID from URL patterns
+                                post_uid_patterns = [
+                                    r'/posts/(\d+)',  # /posts/31258488570464523/
+                                    r'story_fbid=(\d+)',  # story_fbid=31258488570464523
+                                    r'permalink/(\d+)',  # permalink/31258488570464523
+                                    r'posts/.*?(\d{10,})',  # Any long number in posts path
+                                ]
+                                
+                                for pattern in post_uid_patterns:
+                                    post_match = re.search(pattern, link_href)
+                                    if post_match:
+                                        post_uid = post_match.group(1)
+                                        break
+                                
+                                print(f"      ✅ FOCUSED: Found post time link: {link_text} -> Post UID: {post_uid}")
+                                print(f"      📝 Post Link: {post_link[:80]}...")
                                 
                     except Exception as e:
                         print(f"      Error processing link {link_index+1}: {e}")
@@ -918,11 +949,22 @@ class FacebookGroupsScraper:
                 
             print(f"  ✅ FOCUSED: Successfully extracted username: {username}")
             
+            # Extract post information from time elements
+            print(f"    🕒 Extracting post information from time elements...")
+            post_info = self.click_time_element_and_extract_info(element)
+            
+            # Use extracted post info if available, otherwise use the values found during link processing
+            final_post_link = post_info["PostLink"] if post_info["PostLink"] else post_link
+            final_post_uid = post_info["PostUID"] if post_info["PostUID"] != "Unknown" else post_uid
+            
             return {
                 "UID": uid,
                 "Name": username,
                 "ProfileLink": profile_href,
                 "CommentLink": "",
+                "PostLink": final_post_link,
+                "PostUID": final_post_uid,
+                "TimeText": post_info.get("TimeText", ""),
                 "ElementIndex": index,
                 "TextPreview": full_text[:100] + "..." if len(full_text) > 100 else full_text,
                 "ContainerHeight": "Focused on larger height container"
@@ -931,6 +973,97 @@ class FacebookGroupsScraper:
         except Exception as e:
             print(f"Error in focused extraction: {e}")
             return None
+
+    def click_time_element_and_extract_info(self, element):
+        """Click on time elements to extract post link and UID"""
+        try:
+            print("🕒 Searching for clickable time elements...")
+            
+            # Find time elements within the comment element
+            time_selectors = [
+                # Look for time-like links with specific patterns
+                ".//a[contains(@href, 'facebook.com') and (contains(@href, 'posts/') or contains(@href, 'permalink'))]",
+                # Look for spans or divs that might contain time text
+                ".//a[contains(text(), 'ngày') or contains(text(), 'giờ') or contains(text(), 'phút') or contains(text(), 'day') or contains(text(), 'hour') or contains(text(), 'min')]",
+                # Look for elements with time-related attributes
+                ".//a[@role='link' and contains(@href, 'facebook.com')]"
+            ]
+            
+            post_info = {
+                "PostLink": "",
+                "PostUID": "Unknown",
+                "TimeText": ""
+            }
+            
+            for selector in time_selectors:
+                try:
+                    time_links = element.find_elements(By.XPATH, selector)
+                    
+                    for time_link in time_links:
+                        try:
+                            link_text = time_link.text.strip()
+                            link_href = time_link.get_attribute("href") or ""
+                            
+                            # Check if this looks like a time element
+                            time_indicators = ['ngày', 'giờ', 'phút', 'giây', 'day', 'hour', 'minute', 'second', 'min', 'hr', 'h', 'm', 's']
+                            
+                            if (link_href and 'facebook.com' in link_href and 
+                                ('posts/' in link_href or 'permalink' in link_href) and
+                                link_text and any(indicator in link_text.lower() for indicator in time_indicators)):
+                                
+                                post_info["PostLink"] = link_href
+                                post_info["TimeText"] = link_text
+                                
+                                # Extract post UID from URL
+                                post_uid_patterns = [
+                                    r'/posts/(\d+)',  # /posts/31258488570464523/
+                                    r'story_fbid=(\d+)',  # story_fbid=31258488570464523
+                                    r'permalink/(\d+)',  # permalink/31258488570464523
+                                    r'/(\d{15,})',  # Any very long number (Facebook post IDs are usually 15+ digits)
+                                    r'posts/.*?(\d{10,})',  # Any long number in posts path
+                                ]
+                                
+                                for pattern in post_uid_patterns:
+                                    post_match = re.search(pattern, link_href)
+                                    if post_match:
+                                        post_info["PostUID"] = post_match.group(1)
+                                        break
+                                
+                                print(f"      ✅ Found time element: '{link_text}' -> Post UID: {post_info['PostUID']}")
+                                print(f"      📝 Post Link: {link_href[:80]}...")
+                                
+                                # Optional: Click the time element to navigate to the post
+                                try:
+                                    print(f"      🖱️ Clicking time element: {link_text}")
+                                    self.driver.execute_script("arguments[0].click();", time_link)
+                                    time.sleep(2)  # Wait for navigation
+                                    
+                                    # Get the new URL after clicking
+                                    new_url = self.driver.current_url
+                                    print(f"      🌐 Navigated to: {new_url[:80]}...")
+                                    
+                                    # Navigate back to continue processing
+                                    self.driver.back()
+                                    time.sleep(2)
+                                    
+                                except Exception as click_error:
+                                    print(f"      ⚠️ Could not click time element: {click_error}")
+                                
+                                return post_info
+                                
+                        except Exception as link_error:
+                            print(f"      Error processing time link: {link_error}")
+                            continue
+                            
+                except Exception as selector_error:
+                    print(f"    Error with selector {selector}: {selector_error}")
+                    continue
+            
+            return post_info
+            
+        except Exception as e:
+            print(f"Error in click_time_element_and_extract_info: {e}")
+            return {"PostLink": "", "PostUID": "Unknown", "TimeText": ""}
 
     def scrape_all_comments(self, limit=0, resolve_uid=True, progress_callback=None):
         """Main scraping orchestrator with FOCUSED approach"""
