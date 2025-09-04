@@ -953,23 +953,52 @@ class FacebookGroupsScraper:
                                 if ' ' in link_text:
                                     priority_score += 3
                                 
-                                # Extract UID
+                                # FIXED: Enhanced UID extraction with more patterns
                                 extracted_uid = "Unknown"
                                 uid_patterns = [
-                                    r'profile\.php\?id=(\d+)',
-                                    r'user\.php\?id=(\d+)',
-                                    r'/user/(\d+)',
-                                    r'id=(\d+)',
-                                    r'facebook\.com/([^/?]+)',  # Username from URL
-                                    r'(\d{10,})'  # Facebook UIDs are usually 10+ digits
+                                    # Standard UID patterns
+                                    r'profile\.php\?id=(\d+)',           # profile.php?id=123456789
+                                    r'user\.php\?id=(\d+)',              # user.php?id=123456789
+                                    r'/user/(\d+)',                      # /user/123456789
+                                    r'[?&]id=(\d+)',                     # ?id=123456789 or &id=123456789
+                                    r'facebook\.com/profile\.php\?id=(\d+)',  # Full profile URL
+                                    
+                                    # Username patterns (convert to UID later)
+                                    r'facebook\.com/([^/?&]+)/?$',       # facebook.com/username
+                                    r'facebook\.com/([^/?&]+)/?[?&]',    # facebook.com/username?params
+                                    
+                                    # Direct UID patterns in URL
+                                    r'(\d{10,})',                        # Facebook UIDs are usually 10+ digits
+                                    r'/(\d{8,})',                        # 8+ digit numbers in path
                                 ]
                                 
-                                for pattern in uid_patterns:
-                                    uid_match = re.search(pattern, link_href)
-                                    if uid_match:
-                                        extracted_uid = uid_match.group(1)
-                                        priority_score += 5  # Bonus for having UID
-                                        break
+                                print(f"        🔍 FIXED: Extracting UID from: {link_href}")
+                                
+                                for pattern_idx, pattern in enumerate(uid_patterns, 1):
+                                    try:
+                                        uid_match = re.search(pattern, link_href)
+                                        if uid_match:
+                                            potential_uid = uid_match.group(1)
+                                            
+                                            # FIXED: Validate UID
+                                            if potential_uid.isdigit() and len(potential_uid) >= 8:
+                                                extracted_uid = potential_uid
+                                                priority_score += 10  # Higher bonus for valid UID
+                                                print(f"        ✅ UID found with pattern {pattern_idx}: {extracted_uid}")
+                                                break
+                                            elif not potential_uid.isdigit() and len(potential_uid) >= 3:
+                                                # This might be a username, store it
+                                                extracted_uid = f"username:{potential_uid}"
+                                                priority_score += 5
+                                                print(f"        ✅ Username found with pattern {pattern_idx}: {potential_uid}")
+                                                break
+                                                
+                                    except Exception as e:
+                                        print(f"        ⚠️ Pattern {pattern_idx} failed: {e}")
+                                        continue
+                                
+                                if extracted_uid == "Unknown":
+                                    print(f"        ❌ No UID found in URL")
                                 
                                 potential_profile_links.append({
                                     'text': link_text,
@@ -997,23 +1026,33 @@ class FacebookGroupsScraper:
                         
                         print(f"      Link {link_index+1}: Text='{link_text}' | Href={link_href[:60]}...")
                         
-                        # FIXED: Enhanced time link detection patterns
+                        # FIXED: Enhanced time link detection with comprehensive patterns
                         time_patterns = [
-                            r'^\d+\s*ngày',      # "1 ngày", "2 ngày"
-                            r'^\d+\s*giờ',       # "1 giờ", "2 giờ"  
-                            r'^\d+\s*phút',      # "1 phút", "30 phút"
-                            r'^\d+\s*giây',      # "1 giây", "45 giây"
-                            r'^\d+\s*day',       # "1 day", "2 days"
-                            r'^\d+\s*hour',      # "1 hour", "2 hours"
-                            r'^\d+\s*min',       # "1 min", "30 mins"
-                            r'^\d+\s*sec',       # "1 sec", "45 secs"
-                            r'^\d+\s*h$',        # "1h", "2h"
-                            r'^\d+\s*m$',        # "1m", "30m"
-                            r'^\d+\s*d$',        # "1d", "2d"
+                            r'^\d+\s*ngày',           # "1 ngày", "2 ngày", "4 ngày"
+                            r'^\d+\s*giờ',            # "1 giờ", "2 giờ"  
+                            r'^\d+\s*phút',           # "1 phút", "30 phút"
+                            r'^\d+\s*giây',           # "1 giây", "45 giây"
+                            r'^\d+\s*tuần',           # "1 tuần", "2 tuần"
+                            r'^\d+\s*tháng',          # "1 tháng", "2 tháng"
+                            r'^\d+\s*năm',            # "1 năm", "2 năm"
+                            r'^\d+\s*day',            # "1 day", "2 days"
+                            r'^\d+\s*hour',           # "1 hour", "2 hours"
+                            r'^\d+\s*min',            # "1 min", "30 mins"
+                            r'^\d+\s*sec',            # "1 sec", "45 secs"
+                            r'^\d+\s*week',           # "1 week", "2 weeks"
+                            r'^\d+\s*month',          # "1 month", "2 months"
+                            r'^\d+\s*year',           # "1 year", "2 years"
+                            r'^\d+\s*h$',             # "1h", "2h"
+                            r'^\d+\s*m$',             # "1m", "30m"
+                            r'^\d+\s*d$',             # "1d", "2d"
+                            r'^\d+\s*w$',             # "1w", "2w"
+                            r'^\d+\s*y$',             # "1y", "2y"
                         ]
                         
                         # Check if text matches time patterns
                         is_time_text = False
+                        matched_pattern = ""
+                        
                         if link_text:
                             text_lower = link_text.lower().strip()
                             
@@ -1021,39 +1060,63 @@ class FacebookGroupsScraper:
                             for pattern in time_patterns:
                                 if re.match(pattern, text_lower):
                                     is_time_text = True
+                                    matched_pattern = pattern
                                     print(f"        ✅ Time pattern matched: '{pattern}' for '{text_lower}'")
                                     break
                             
                             # Check special cases
-                            if not is_time_text and text_lower in ['just now', 'vừa xong', 'now', 'bây giờ']:
+                            special_time_cases = ['just now', 'vừa xong', 'now', 'bây giờ', 'vài giây', 'một lúc']
+                            if not is_time_text and text_lower in special_time_cases:
                                 is_time_text = True
+                                matched_pattern = "special_case"
                                 print(f"        ✅ Special time text: '{text_lower}'")
                         
-                        # Check if href contains Facebook and comment_id
-                        is_facebook_comment_link = (link_href and 
-                                                   'facebook.com' in link_href and 
-                                                   'comment_id=' in link_href)
+                        # FIXED: Enhanced Facebook comment link detection
+                        is_facebook_comment_link = False
+                        if link_href:
+                            # Must contain facebook.com and comment_id
+                            has_facebook = 'facebook.com' in link_href
+                            has_comment_id = 'comment_id=' in link_href
+                            has_groups = '/groups/' in link_href
+                            has_posts = '/posts/' in link_href
+                            
+                            is_facebook_comment_link = has_facebook and has_comment_id and has_groups and has_posts
+                            
+                            print(f"        📊 Link analysis: FB={has_facebook}, Comment={has_comment_id}, Groups={has_groups}, Posts={has_posts}")
                         
-                        print(f"        Time text: {is_time_text}, FB comment link: {is_facebook_comment_link}")
+                        print(f"        🎯 Final: Time text={is_time_text}, FB comment link={is_facebook_comment_link}")
                         
                         # FIXED: Accept as time link if it has time text AND Facebook comment link
                         if is_time_text and is_facebook_comment_link:
+                            # Clean the href
+                            cleaned_href = link_href.replace('&amp;', '&')
+                            
                             time_links.append({
                                 'text': link_text,
-                                'href': link_href,
+                                'href': cleaned_href,
+                                'original_href': link_href,
+                                'pattern': matched_pattern,
                                 'index': link_index
                             })
-                            print(f"        🎯 FIXED: Added time link: '{link_text}' -> {link_href[:80]}...")
+                            print(f"        🎯 FIXED: Added time link: '{link_text}' (pattern: {matched_pattern})")
+                            print(f"             Href: {cleaned_href[:80]}...")
                         
-                        # FIXED: Also accept links that look like Facebook comment links even without perfect time text
+                        # FIXED: Relaxed criteria for potential time links
                         elif (link_href and 'facebook.com' in link_href and 'comment_id=' in link_href and 
-                              link_text and len(link_text) < 20 and not any(char in link_text.lower() for char in ['like', 'reply', 'share'])):
+                              link_text and len(link_text) <= 15 and 
+                              not any(ui_word in link_text.lower() for ui_word in ['like', 'reply', 'share', 'thích', 'trả lời', 'chia sẻ', 'view', 'xem'])):
+                            
+                            cleaned_href = link_href.replace('&amp;', '&')
+                            
                             time_links.append({
                                 'text': link_text,
-                                'href': link_href,
+                                'href': cleaned_href,
+                                'original_href': link_href,
+                                'pattern': 'relaxed_criteria',
                                 'index': link_index
                             })
-                            print(f"        🎯 FIXED: Added potential time link: '{link_text}' -> {link_href[:80]}...")
+                            print(f"        🎯 FIXED: Added potential time link (relaxed): '{link_text}'")
+                            print(f"             Href: {cleaned_href[:80]}...")
                             
                     except Exception as e:
                         print(f"        ❌ Error processing link {link_index+1}: {e}")
