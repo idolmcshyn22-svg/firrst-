@@ -386,7 +386,7 @@ class FacebookGroupsScraper:
             print(f"Error checking if div is comment: {e}")
             return False
 
-    def extract_groups_comments(self):
+    def extract_groups_comments(self, click_name=True, click_time=True):
         """FOCUSED comment extraction targeting larger height container"""
         print(f"=== EXTRACTING GROUPS COMMENTS (FOCUSED) ===")
 
@@ -587,7 +587,7 @@ class FacebookGroupsScraper:
                                 try:
                                     print(f"\n--- Processing comment div {i+1}/{len(comment_parent_divs)} ---")
                                     
-                                    comment_data = self.extract_comment_data_focused(element, i)
+                                    comment_data = self.extract_comment_data_focused(element, i, click_name=click_name, click_time=click_time)
                                     
                                     if not comment_data:
                                         continue
@@ -633,7 +633,7 @@ class FacebookGroupsScraper:
                         try:
                             print(f"\n--- Processing comment div {i+1}/{len(comment_parent_divs)} ---")
                             
-                            comment_data = self.extract_comment_data_focused(element, i)
+                            comment_data = self.extract_comment_data_focused(element, i, click_name=click_name, click_time=click_time)
                             
                             if not comment_data:
                                 continue
@@ -788,7 +788,7 @@ class FacebookGroupsScraper:
             try:
                 print(f"\n--- Element {i+1}/{len(all_comment_elements)} ---")
                 
-                comment_data = self.extract_comment_data_focused(element, i)
+                comment_data = self.extract_comment_data_focused(element, i, click_name=click_name, click_time=click_time)
                 
                 if not comment_data:
                     continue
@@ -819,7 +819,7 @@ class FacebookGroupsScraper:
         print(f"\n=== FOCUSED EXTRACTION COMPLETE: {len(comments)} comments ===")
         return comments
 
-    def extract_comment_data_focused(self, element, index):
+    def extract_comment_data_focused(self, element, index, click_name=True, click_time=True):
         """FOCUSED comment data extraction"""
         try:
             full_text = element.text.strip()
@@ -841,19 +841,24 @@ class FacebookGroupsScraper:
             # FOCUSED: Enhanced username extraction with click functionality
             print(f"    🎯 FOCUSED analysis of element structure...")
             
-            # Method 1: Click on user name to get profile info and UID
-            print(f"    👤 Attempting to click user name for UID extraction...")
-            profile_click_info = self.click_name_and_extract_uid(element)
-            clicked_profile_url = profile_click_info.get("ClickedURL", "")
+            # Method 1: Click on user name to get profile info and UID (if enabled)
+            clicked_profile_url = ""
+            if click_name:
+                print(f"    👤 Attempting to click user name for UID extraction...")
+                profile_click_info = self.click_name_and_extract_uid(element)
+                clicked_profile_url = profile_click_info.get("ClickedURL", "")
+                
+                if profile_click_info["UID"] != "Unknown":
+                    username = profile_click_info["NameText"]
+                    profile_href = profile_click_info["ProfileLink"] or profile_click_info["ClickedURL"]
+                    uid = profile_click_info["UID"]
+                    print(f"      ✅ Successfully extracted via name click: {username} -> UID: {uid}")
+                else:
+                    print(f"    🔄 Name click failed, falling back to traditional analysis...")
             
-            if profile_click_info["UID"] != "Unknown":
-                username = profile_click_info["NameText"]
-                profile_href = profile_click_info["ProfileLink"] or profile_click_info["ClickedURL"]
-                uid = profile_click_info["UID"]
-                print(f"      ✅ Successfully extracted via name click: {username} -> UID: {uid}")
-            else:
-                # Fallback: Traditional link analysis if click method failed
-                print(f"    🔄 Click method failed, falling back to traditional link analysis...")
+            # Fallback or primary method if click_name is disabled
+            if username == "Unknown":
+                print(f"    🔄 Using traditional link analysis...")
                 try:
                     all_links = element.find_elements(By.XPATH, ".//a")
                     print(f"    Found {len(all_links)} total links in element")
@@ -902,35 +907,35 @@ class FacebookGroupsScraper:
                                     
                                     print(f"      ✅ FOCUSED: Found valid profile: {username} -> UID: {uid}")
                                     break
-                        
-                        # Check if this is a Facebook post time link
-                        elif ('facebook.com' in link_href and 
-                              ('posts/' in link_href or 'permalink' in link_href) and
-                              ('comment_id=' in link_href or '?' in link_href)):
                             
-                            # Check if link text looks like time (e.g., "4 ngày", "2 hours", etc.)
-                            time_indicators = ['ngày', 'giờ', 'phút', 'giây', 'day', 'hour', 'minute', 'second', 'min', 'hr', 'h', 'm', 's']
-                            if (link_text and 
-                                any(indicator in link_text.lower() for indicator in time_indicators)):
+                            # Check if this is a Facebook post time link
+                            elif ('facebook.com' in link_href and 
+                                  ('posts/' in link_href or 'permalink' in link_href) and
+                                  ('comment_id=' in link_href or '?' in link_href)):
                                 
-                                post_link = link_href
-                                
-                                # Extract post UID from URL patterns
-                                post_uid_patterns = [
-                                    r'/posts/(\d+)',  # /posts/31258488570464523/
-                                    r'story_fbid=(\d+)',  # story_fbid=31258488570464523
-                                    r'permalink/(\d+)',  # permalink/31258488570464523
-                                    r'posts/.*?(\d{10,})',  # Any long number in posts path
-                                ]
-                                
-                                for pattern in post_uid_patterns:
-                                    post_match = re.search(pattern, link_href)
-                                    if post_match:
-                                        post_uid = post_match.group(1)
-                                        break
-                                
-                                print(f"      ✅ FOCUSED: Found post time link: {link_text} -> Post UID: {post_uid}")
-                                print(f"      📝 Post Link: {post_link[:80]}...")
+                                # Check if link text looks like time (e.g., "4 ngày", "2 hours", etc.)
+                                time_indicators = ['ngày', 'giờ', 'phút', 'giây', 'day', 'hour', 'minute', 'second', 'min', 'hr', 'h', 'm', 's']
+                                if (link_text and 
+                                    any(indicator in link_text.lower() for indicator in time_indicators)):
+                                    
+                                    post_link = link_href
+                                    
+                                    # Extract post UID from URL patterns
+                                    post_uid_patterns = [
+                                        r'/posts/(\d+)',  # /posts/31258488570464523/
+                                        r'story_fbid=(\d+)',  # story_fbid=31258488570464523
+                                        r'permalink/(\d+)',  # permalink/31258488570464523
+                                        r'posts/.*?(\d{10,})',  # Any long number in posts path
+                                    ]
+                                    
+                                    for pattern in post_uid_patterns:
+                                        post_match = re.search(pattern, link_href)
+                                        if post_match:
+                                            post_uid = post_match.group(1)
+                                            break
+                                    
+                                    print(f"      ✅ FOCUSED: Found post time link: {link_text} -> Post UID: {post_uid}")
+                                    print(f"      📝 Post Link: {post_link[:80]}...")
                                 
                         except Exception as e:
                             print(f"      Error processing link {link_index+1}: {e}")
@@ -961,9 +966,11 @@ class FacebookGroupsScraper:
                 
             print(f"  ✅ FOCUSED: Successfully extracted username: {username}")
             
-            # Extract post information from time elements
-            print(f"    🕒 Extracting post information from time elements...")
-            post_info = self.click_time_element_and_extract_info(element)
+            # Extract post information from time elements (if enabled)
+            post_info = {"PostLink": "", "PostUID": "Unknown", "TimeText": ""}
+            if click_time:
+                print(f"    🕒 Extracting post information from time elements...")
+                post_info = self.click_time_element_and_extract_info(element)
             
             # Use extracted post info if available, otherwise use the values found during link processing
             final_post_link = post_info["PostLink"] if post_info["PostLink"] else post_link
@@ -1085,12 +1092,14 @@ class FacebookGroupsScraper:
             
             # Find clickable name elements within the comment element
             name_selectors = [
-                # Look for profile links
+                # Look for profile links first (most reliable)
                 ".//a[contains(@href, 'facebook.com') and (contains(@href, 'profile.php') or contains(@href, '/user/') or contains(@href, 'user.php'))]",
-                # Look for any Facebook profile links
-                ".//a[contains(@href, 'facebook.com') and not(contains(@href, 'posts/')) and not(contains(@href, 'photo')) and not(contains(@href, 'video'))]",
-                # Look for links that might be usernames
-                ".//a[@role='link' and contains(@href, 'facebook.com')]"
+                # Look for any Facebook links that are NOT posts, photos, videos, or groups
+                ".//a[contains(@href, 'facebook.com') and not(contains(@href, 'posts/')) and not(contains(@href, 'photo')) and not(contains(@href, 'video')) and not(contains(@href, 'groups/'))]",
+                # Look for any clickable links with role='link'
+                ".//a[@role='link' and contains(@href, 'facebook.com') and not(contains(@href, 'posts/'))]",
+                # Broader search for any Facebook links
+                ".//a[contains(@href, 'facebook.com')]"
             ]
             
             profile_info = {
@@ -1109,16 +1118,21 @@ class FacebookGroupsScraper:
                             link_text = name_link.text.strip()
                             link_href = name_link.get_attribute("href") or ""
                             
-                            # Check if this looks like a user name (not UI elements)
+                            # Check if this looks like a user name (not UI elements or time elements)
                             ui_keywords = ['like', 'reply', 'share', 'comment', 'thích', 'trả lời', 
                                          'chia sẻ', 'bình luận', 'ago', 'trước', 'min', 'hour', 
                                          'day', 'phút', 'giờ', 'ngày', 'view', 'xem', 'show', 'see more']
+                            time_keywords = ['ngày', 'giờ', 'phút', 'giây', 'day', 'hour', 'minute', 'second', 'min', 'hr', 'h', 'm', 's']
+                            
+                            # Skip if this is a post/time link
+                            is_post_link = ('posts/' in link_href or 'permalink' in link_href) and any(time_word in link_text.lower() for time_word in time_keywords)
                             
                             if (link_text and 
                                 len(link_text) >= 2 and 
                                 len(link_text) <= 100 and
                                 not link_text.isdigit() and
                                 not link_text.startswith('http') and
+                                not is_post_link and
                                 not any(ui in link_text.lower() for ui in ui_keywords)):
                                 
                                 # This looks like a user name, let's click it
@@ -1336,7 +1350,50 @@ class FacebookGroupsScraper:
             print(f"Error extracting UID from link: {e}")
             return "Unknown"
 
-    def scrape_all_comments(self, limit=0, resolve_uid=True, progress_callback=None):
+    def test_name_click_functionality(self):
+        """Test method to verify name clicking functionality"""
+        try:
+            print("🧪 Testing name click functionality...")
+            
+            # Find all potential comment elements
+            comment_selectors = [
+                "//div[contains(@class, 'html-div')]",
+                "//div[@role='article']",
+                "//div[.//a[contains(@href, 'facebook.com')]]"
+            ]
+            
+            test_elements = []
+            for selector in comment_selectors:
+                try:
+                    elements = self.driver.find_elements(By.XPATH, selector)
+                    test_elements.extend(elements[:3])  # Take first 3 from each selector
+                except:
+                    continue
+            
+            print(f"Found {len(test_elements)} elements to test")
+            
+            for i, element in enumerate(test_elements[:5]):  # Test first 5 elements
+                try:
+                    print(f"\n--- Testing element {i+1} ---")
+                    
+                    # Test name clicking
+                    profile_info = self.click_name_and_extract_uid(element)
+                    print(f"Profile Info: {profile_info}")
+                    
+                    # Test time clicking
+                    post_info = self.click_time_element_and_extract_info(element)
+                    print(f"Post Info: {post_info}")
+                    
+                except Exception as e:
+                    print(f"Error testing element {i+1}: {e}")
+                    continue
+            
+            print("🧪 Test completed!")
+            
+        except Exception as e:
+            print(f"Error in test method: {e}")
+
+    def scrape_all_comments(self, limit=0, resolve_uid=True, click_name=True, click_time=True, progress_callback=None):
         """Main scraping orchestrator with FOCUSED approach"""
         print(f"=== STARTING FOCUSED GROUPS SCRAPING ===")
         
@@ -1344,7 +1401,7 @@ class FacebookGroupsScraper:
             return []
         
         # Step 1: Extract comments with focus
-        comments = self.extract_groups_comments()
+        comments = self.extract_groups_comments(click_name=click_name, click_time=click_time)
         
         # Step 2: Apply limit
         if limit > 0 and len(comments) > limit:
@@ -1426,6 +1483,14 @@ class FBGroupsAppGUI:
         self.resolve_uid_var = tk.BooleanVar(value=True)
         tk.Checkbutton(opt_grid, text="🆔 Lấy UID", variable=self.resolve_uid_var, 
                       bg="#121212", font=("Arial", 9)).grid(row=1, column=1, sticky="w", pady=(10,0))
+
+        self.click_name_var = tk.BooleanVar(value=True)
+        tk.Checkbutton(opt_grid, text="🖱️ Click tên lấy UID", variable=self.click_name_var, 
+                      bg="#121212", font=("Arial", 9)).grid(row=2, column=0, sticky="w", pady=(5,0))
+
+        self.click_time_var = tk.BooleanVar(value=True)
+        tk.Checkbutton(opt_grid, text="🕒 Click time lấy link", variable=self.click_time_var, 
+                      bg="#121212", font=("Arial", 9)).grid(row=2, column=1, sticky="w", pady=(5,0))
 
         # File section
         file_frame = tk.LabelFrame(main_frame, text="💾 Xuất kết quả", font=("Arial", 12, "bold"), 
@@ -1647,7 +1712,8 @@ class FBGroupsAppGUI:
 
         self._scrape_thread = threading.Thread(target=self._scrape_worker, 
                                              args=(url, cookie_str, file_out, limit, 
-                                                   self.headless_var.get(), self.resolve_uid_var.get()))
+                                                   self.headless_var.get(), self.resolve_uid_var.get(),
+                                                   self.click_name_var.get(), self.click_time_var.get()))
         self._scrape_thread.daemon = True
         self._scrape_thread.start()
 
@@ -1663,7 +1729,7 @@ class FBGroupsAppGUI:
         self.lbl_status.config(text=f"📈 FIXED processing... Đã lấy {count} comments", fg="#28a745")
         self.root.update_idletasks()
 
-    def _scrape_worker(self, url, cookie_str, file_out, limit, headless, resolve_uid):
+    def _scrape_worker(self, url, cookie_str, file_out, limit, headless, resolve_uid, click_name=True, click_time=True):
         try:
             # Initialize
             self.lbl_status.config(text="🌐 Khởi tạo FIXED Groups scraper...", fg="#fd7e14")
@@ -1691,7 +1757,8 @@ class FBGroupsAppGUI:
             self.lbl_status.config(text=f"🔍 FIXED Groups extraction ({layout})...", fg="#fd7e14")
             self.lbl_progress_detail.config(text="⏳ Using enhanced username extraction with multiple fallback strategies...")
             
-            comments = self.scraper.scrape_all_comments(limit=limit, resolve_uid=resolve_uid, 
+            comments = self.scraper.scrape_all_comments(limit=limit, resolve_uid=resolve_uid,
+                                                       click_name=click_name, click_time=click_time,
                                                        progress_callback=self._progress_cb)
             
             print(f"✅ Comments: {comments}")
