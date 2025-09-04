@@ -1,24 +1,5 @@
-# HTML Element Focuser Requirements
-# Python 3.7+ required
-
-# Core dependencies - using only Python standard library
-# No external dependencies required for basic functionality
-
-# Runtime dependencies for textpa.py GUI scraper
-selenium>=4.20.0
-webdriver-manager>=4.0.2
-pandas>=2.0.0
-requests>=2.31.0
-openpyxl>=3.1.0
-
-# Optional dependencies for enhanced features (uncomment if needed):
-# beautifulsoup4>=4.9.0    # For advanced HTML parsing
-# lxml>=4.6.0              # Fast XML/HTML parser
-# requests>=2.25.0         # For fetching HTML from URLs
-# click>=8.0.0             # For enhanced CLI interface
-
-# Development dependencies:
-# pytest>=6.0.0            # For testing
-# black>=21.0.0            # Code formatting
-# flake8>=3.8.0            # Code linting
-# mypy>=0.800              # Type checking
+selenium>=4.15.0
+webdriver-manager>=4.0.1
+pandas>=1.5.0
+requests>=2.28.0
+openpyxl>=3.0.0
