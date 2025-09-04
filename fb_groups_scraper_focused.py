@@ -49,6 +49,73 @@ def clean_text(text):
         text = re.sub(pattern, '', text, flags=re.IGNORECASE)
     return text.strip()
 
+def is_anonymous_user(username):
+    """
+    Kiểm tra xem có phải là người dùng ẩn danh không
+    Args:
+        username (str): Tên người dùng cần kiểm tra
+    Returns:
+        bool: True nếu là ẩn danh, False nếu không
+    """
+    if not username or username == "Unknown":
+        return True
+    
+    username_lower = username.lower().strip()
+    
+    # Các pattern để nhận diện người dùng ẩn danh
+    anonymous_patterns = [
+        # Tiếng Việt
+        r'\b(ẩn\s*danh|an\s*danh|người\s*dùng\s*ẩn\s*danh)\b',
+        r'\b(thành\s*viên\s*ẩn\s*danh|tv\s*ẩn\s*danh)\b',
+        r'\b(người\s*tham\s*gia\s*ẩn\s*danh|participant\s*ẩn\s*danh)\b',
+        
+        # Tiếng Anh  
+        r'\b(anonymous|anon)\b',
+        r'\b(anonymous\s*(user|member|participant))\b',
+        r'\b(hidden\s*(user|member|participant))\b',
+        r'\b(private\s*(user|member|participant))\b',
+        
+        # Các pattern phổ biến khác
+        r'\b(user\s*\d+)\b',  # user123, user456
+        r'\b(member\s*\d+)\b',  # member123
+        r'\b(participant\s*\d+)\b',  # participant123
+        r'\b(guest\s*\d*)\b',  # guest, guest123
+        r'\b(unknown\s*(user|member))\b',
+        r'^\d+$',  # Chỉ là số
+        r'^[a-f0-9]{8,}$',  # Hash string dài
+        
+        # Facebook specific
+        r'\b(facebook\s*user)\b',
+        r'\b(fb\s*user)\b',
+        r'\b(deleted\s*(user|account))\b',
+        r'\b(deactivated\s*(user|account))\b',
+    ]
+    
+    # Kiểm tra từng pattern
+    for pattern in anonymous_patterns:
+        if re.search(pattern, username_lower):
+            print(f"    🚫 Detected anonymous user: '{username}' (matched: {pattern})")
+            return True
+    
+    # Kiểm tra các trường hợp đặc biệt
+    # Username quá ngắn (< 2 ký tự)
+    if len(username.strip()) < 2:
+        print(f"    🚫 Username too short: '{username}'")
+        return True
+    
+    # Username chỉ chứa ký tự đặc biệt
+    if re.match(r'^[^\w\s]+$', username):
+        print(f"    🚫 Username only special chars: '{username}'")
+        return True
+    
+    # Username có pattern nghi ngờ (nhiều số liên tiếp)
+    if re.search(r'\d{6,}', username):
+        print(f"    🚫 Username has suspicious number pattern: '{username}'")
+        return True
+    
+    print(f"    ✅ Valid username: '{username}'")
+    return False
+
 def extract_uid_from_profile_url(profile_url):
     """
     Extract UID từ Facebook profile URL
@@ -812,9 +879,14 @@ class FacebookGroupsScraper:
                                     if not comment_data:
                                         continue
                                     
-                                    # Deduplication
+                                    # Deduplication + Anonymous filter
                                     if comment_data['Name'] == "Unknown":
                                         print("  ✗ Skipped: no username found")
+                                        continue
+                                    
+                                    # 🚫 BỎ QUA NGƯỜI DÙNG ẨN DANH
+                                    if is_anonymous_user(comment_data['Name']):
+                                        print(f"  🚫 Skipped anonymous user: {comment_data['Name']}")
                                         continue
                                         
                                     # Check for duplicates
@@ -858,9 +930,14 @@ class FacebookGroupsScraper:
                             if not comment_data:
                                 continue
                             
-                            # Deduplication
+                            # Deduplication + Anonymous filter
                             if comment_data['Name'] == "Unknown":
                                 print("  ✗ Skipped: no username found")
+                                continue
+                            
+                            # 🚫 BỎ QUA NGƯỜI DÙNG ẨN DANH
+                            if is_anonymous_user(comment_data['Name']):
+                                print(f"  🚫 Skipped anonymous user: {comment_data['Name']}")
                                 continue
                                 
                             # Check for duplicates
@@ -999,9 +1076,14 @@ class FacebookGroupsScraper:
                 if not comment_data:
                     continue
                 
-                # Deduplication
+                # Deduplication + Anonymous filter
                 if comment_data['Name'] == "Unknown":
                     print("  ✗ Skipped: no username found")
+                    continue
+                
+                # 🚫 BỎ QUA NGƯỜI DÙNG ẨN DANH
+                if is_anonymous_user(comment_data['Name']):
+                    print(f"  🚫 Skipped anonymous user: {comment_data['Name']}")
                     continue
                     
                 # Check for duplicates
@@ -1059,16 +1141,17 @@ class FacebookGroupsScraper:
                             ('profile.php' in link_href or '/user/' in link_href or 'user.php' in link_href or 
                              (not any(x in link_href for x in ['groups', 'pages', 'events', 'photo', 'video'])))):
                             
-                            # Enhanced name validation
+                            # Enhanced name validation với anonymous filter
                             if (link_text and 
                                 len(link_text) >= 2 and 
                                 len(link_text) <= 100 and
                                 not link_text.isdigit() and
                                 not link_text.startswith('http') and
+                                not is_anonymous_user(link_text) and  # 🚫 BỎ QUA NGƯỜI DÙNG ẨN DANH
                                 not any(ui in link_text.lower() for ui in [
                                     'like', 'reply', 'share', 'comment', 'thích', 'trả lời', 
                                     'chia sẻ', 'bình luận', 'ago', 'trước', 'min', 'hour', 
-                                    'day', 'phút', 'giờ', 'ngày', 'ẩn danh', 'anonymous',
+                                    'day', 'phút', 'giờ', 'ngày', 
                                     'view', 'xem', 'show', 'hiển thị', 'see more', 'view more'
                                 ])):
                                 
@@ -1111,8 +1194,12 @@ class FacebookGroupsScraper:
                         first_child_text = (children[0].text or "").strip()
                         if first_child_text:
                             first_line = first_child_text.splitlines()[0].strip()
-                            # Basic validation for a plausible name line
-                            if first_line and 2 <= len(first_line) <= 120 and not first_line.startswith("http"):
+                            # Basic validation for a plausible name line + anonymous check
+                            if (first_line and 
+                                2 <= len(first_line) <= 120 and 
+                                not first_line.startswith("http") and
+                                not is_anonymous_user(first_line)):  # 🚫 BỎ QUA NGƯỜI DÙNG ẨN DANH
+                                
                                 username = first_line
                                 print(f"      ✅ Fallback name from first child: {username}")
                                 
@@ -1122,6 +1209,9 @@ class FacebookGroupsScraper:
                                 if resolved_uid != "Unknown":
                                     uid = resolved_uid
                                     print(f"      ✅ Successfully resolved UID from fallback: {uid}")
+                            else:
+                                if first_line and is_anonymous_user(first_line):
+                                    print(f"      🚫 Skipped anonymous fallback username: {first_line}")
                                 
                 except Exception as e:
                     print(f"      ⚠️ Fallback name extraction error: {e}")
@@ -1216,11 +1306,11 @@ class FBGroupsAppGUI:
         header_frame = tk.Frame(main_frame, bg="#121212")
         header_frame.pack(fill="x", pady=(0,20))
         
-        title_label = tk.Label(header_frame, text="🎯 Facebook Groups Comment Scraper - FOCUSED + UID", 
+        title_label = tk.Label(header_frame, text="🎯 FB Groups Scraper - FOCUSED + UID + Anonymous Filter", 
                               font=("Arial", 20, "bold"), bg="#121212", fg="#a5d6a7")
         title_label.pack()
         
-        subtitle_label = tk.Label(header_frame, text="🎯 Enhanced version - Extracts usernames + converts to UIDs", 
+        subtitle_label = tk.Label(header_frame, text="🎯 Enhanced: Extracts usernames + UIDs + Skips anonymous users", 
                                  font=("Arial", 11), bg="#121212", fg="#b0b0b0")
         subtitle_label.pack(pady=(5,0))
 
@@ -1238,7 +1328,7 @@ class FBGroupsAppGUI:
         self.txt_cookie.pack(fill="x", padx=15, pady=(0,15))
 
         # Options section
-        options_frame = tk.LabelFrame(main_frame, text="🎯 Cấu hình FOCUSED + UID Version", font=("Arial", 12, "bold"), 
+        options_frame = tk.LabelFrame(main_frame, text="🎯 Cấu hình FOCUSED + UID + Anonymous Filter", font=("Arial", 12, "bold"), 
                                      bg="#121212", fg="#a5d6a7", relief="groove", bd=2)
         options_frame.pack(fill="x", pady=(0,15))
         
@@ -1260,6 +1350,10 @@ class FBGroupsAppGUI:
         tk.Checkbutton(opt_grid, text="🆔 Lấy UID từ username", variable=self.resolve_uid_var, 
                       bg="#121212", font=("Arial", 9)).grid(row=1, column=1, sticky="w", pady=(10,0))
 
+        # Thêm note về anonymous filter
+        tk.Label(opt_grid, text="🚫 Tự động bỏ qua người dùng ẩn danh", bg="#121212", fg="#ffc107", 
+                font=("Arial", 9, "italic")).grid(row=2, column=0, columnspan=3, sticky="w", pady=(5,0))
+
         # File section
         file_frame = tk.LabelFrame(main_frame, text="💾 Xuất kết quả", font=("Arial", 12, "bold"), 
                                   bg="#121212", fg="#a5d6a7", relief="groove", bd=2)
@@ -1270,7 +1364,7 @@ class FBGroupsAppGUI:
         
         self.entry_file = tk.Entry(file_row, width=70, font=("Arial", 9))
         current_date = datetime.now().strftime("%d_%m_%Y")
-        self.entry_file.insert(0, f"facebook_groups_comments_UID_{current_date}.xlsx")
+        self.entry_file.insert(0, f"facebook_groups_comments_UID_NoAnonymous_{current_date}.xlsx")
         self.entry_file.pack(side="left", fill="x", expand=True)
         
         self.btn_choose = tk.Button(file_row, text="📁 Chọn", command=self.choose_file, 
@@ -1278,15 +1372,15 @@ class FBGroupsAppGUI:
         self.btn_choose.pack(side="right", padx=(10,0))
 
         # Status section
-        status_frame = tk.LabelFrame(main_frame, text="📊 Trạng thái thực thi - ENHANCED UID", font=("Arial", 12, "bold"), 
+        status_frame = tk.LabelFrame(main_frame, text="📊 Trạng thái thực thi - ENHANCED UID + ANONYMOUS FILTER", font=("Arial", 12, "bold"), 
                                     bg="#121212", fg="#a5d6a7", relief="groove", bd=2)
         status_frame.pack(fill="x", pady=(0,15))
         
-        self.lbl_status = tk.Label(status_frame, text="✅ Enhanced UID scraper sẵn sàng - Đã thêm chức năng lấy UID từ username", fg="#28a745", 
+        self.lbl_status = tk.Label(status_frame, text="✅ Enhanced UID + Anonymous Filter scraper sẵn sàng - Tự động bỏ qua người dùng ẩn danh", fg="#28a745", 
                                   wraplength=900, justify="left", font=("Arial", 11), bg="#121212")
         self.lbl_status.pack(anchor="w", padx=15, pady=(15,5))
 
-        self.lbl_progress_detail = tk.Label(status_frame, text="💡 NEW: Username → UID conversion | URL UID extraction | Selenium + Requests methods | Enhanced debugging",
+        self.lbl_progress_detail = tk.Label(status_frame, text="💡 NEW: Username → UID conversion | Anonymous user filtering | Enhanced validation | Smart debugging",
                                           fg="#b0b0b0", wraplength=900, justify="left", font=("Arial", 9), bg="#121212")
         self.lbl_progress_detail.pack(anchor="w", padx=15, pady=(0,10))
 
@@ -1298,7 +1392,7 @@ class FBGroupsAppGUI:
         button_frame = tk.Frame(main_frame, bg="#121212")
         button_frame.pack(fill="x", pady=20)
         
-        self.btn_start = tk.Button(button_frame, text="🚀 Bắt đầu UID Scraping", bg="#28a745", fg="black", 
+        self.btn_start = tk.Button(button_frame, text="🚀 Bắt đầu UID + Filter Scraping", bg="#28a745", fg="black", 
                                   font=("Arial", 14, "bold"), command=self.start_scrape_thread, 
                                   pady=12, padx=40)
         self.btn_start.pack(side="left")
@@ -1557,14 +1651,15 @@ class FBGroupsAppGUI:
                 uid_count = len([c for c in comments if c.get('UID', 'Unknown') != 'Unknown'])
                 uid_success_rate = (uid_count / len(comments)) * 100 if comments else 0
                 
-                self.lbl_status.config(text=f"🎉 ENHANCED UID GROUPS SCRAPING HOÀN THÀNH!", fg="#28a745")
-                self.lbl_progress_detail.config(text=f"📊 Enhanced Results: {len(comments)} comments | {unique_users} users | {profile_links} links | {uid_count} UIDs ({uid_success_rate:.1f}%) | Layout: {layout}")
+                self.lbl_status.config(text=f"🎉 ENHANCED UID + ANONYMOUS FILTER SCRAPING HOÀN THÀNH!", fg="#28a745")
+                self.lbl_progress_detail.config(text=f"📊 Results: {len(comments)} comments | {unique_users} users | {profile_links} links | {uid_count} UIDs ({uid_success_rate:.1f}%) | 🚫 Anonymous filtered | Layout: {layout}")
                 
-                print(f"🎯 ENHANCED UID SCRAPING COMPLETE!")
-                print(f"   📊 Results: {len(comments)} total comments")
+                print(f"🎯 ENHANCED UID + ANONYMOUS FILTER SCRAPING COMPLETE!")
+                print(f"   📊 Results: {len(comments)} total comments (anonymous users filtered out)")
                 print(f"   👥 Unique users: {unique_users}")
                 print(f"   🔗 Profile links: {profile_links}")
                 print(f"   🆔 UIDs extracted: {uid_count} ({uid_success_rate:.1f}% success rate)")
+                print(f"   🚫 Anonymous users: Automatically filtered out")
                 print(f"   📱 Layout used: {layout}")
                 print(f"   💾 Saved to: {file_out}")
                 
