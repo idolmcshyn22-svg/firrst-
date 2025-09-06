@@ -592,13 +592,21 @@ class FacebookGroupsScraper:
                                     if not comment_data:
                                         continue
                                     
-                                    # Deduplication
-                                    if comment_data['Name'] == "Unknown":
-                                        print("  ✗ Skipped: no username found")
+                                    # FIXED: Deduplication - allow anonymous users with "Unknown" name
+                                    # Skip only if no name found AND not anonymous
+                                    if (comment_data['Name'] == "Unknown" and 
+                                        comment_data['UID'] != "Anonymous"):
+                                        print("  ✗ Skipped: no username found (not anonymous)")
                                         continue
                                         
-                                    # Check for duplicates
-                                    content_signature = f"{comment_data['Name']}_{comment_data['ProfileLink']}"
+                                    # FIXED: Check for duplicates using UID + Name + PostLink for better uniqueness
+                                    if comment_data['UID'] == "Anonymous":
+                                        # For anonymous users, use PostLink for uniqueness
+                                        content_signature = f"Anonymous_{comment_data.get('PostLink', '')}"
+                                    else:
+                                        # For regular users, use Name + UID
+                                        content_signature = f"{comment_data['Name']}_{comment_data['UID']}"
+                                    
                                     if content_signature in seen_content:
                                         print("  ✗ Skipped: duplicate user")
                                         continue
@@ -638,13 +646,21 @@ class FacebookGroupsScraper:
                             if not comment_data:
                                 continue
                             
-                            # Deduplication
-                            if comment_data['Name'] == "Unknown":
-                                print("  ✗ Skipped: no username found")
+                            # FIXED: Deduplication - allow anonymous users with "Unknown" name
+                            # Skip only if no name found AND not anonymous
+                            if (comment_data['Name'] == "Unknown" and 
+                                comment_data['UID'] != "Anonymous"):
+                                print("  ✗ Skipped: no username found (not anonymous)")
                                 continue
                                 
-                            # Check for duplicates
-                            content_signature = f"{comment_data['Name']}_{comment_data['ProfileLink']}"
+                            # FIXED: Check for duplicates using UID + Name + PostLink for better uniqueness
+                            if comment_data['UID'] == "Anonymous":
+                                # For anonymous users, use PostLink for uniqueness
+                                content_signature = f"Anonymous_{comment_data.get('PostLink', '')}"
+                            else:
+                                # For regular users, use Name + UID
+                                content_signature = f"{comment_data['Name']}_{comment_data['UID']}"
+                            
                             if content_signature in seen_content:
                                 print("  ✗ Skipped: duplicate user")
                                 continue
@@ -793,13 +809,21 @@ class FacebookGroupsScraper:
                 if not comment_data:
                     continue
                 
-                # Deduplication
-                if comment_data['Name'] == "Unknown":
-                    print("  ✗ Skipped: no username found")
+                # FIXED: Deduplication - allow anonymous users with "Unknown" name
+                # Skip only if no name found AND not anonymous
+                if (comment_data['Name'] == "Unknown" and 
+                    comment_data['UID'] != "Anonymous"):
+                    print("  ✗ Skipped: no username found (not anonymous)")
                     continue
                     
-                # Check for duplicates
-                content_signature = f"{comment_data['Name']}_{comment_data['ProfileLink']}"
+                # FIXED: Check for duplicates using UID + Name + PostLink for better uniqueness
+                if comment_data['UID'] == "Anonymous":
+                    # For anonymous users, use PostLink for uniqueness
+                    content_signature = f"Anonymous_{comment_data.get('PostLink', '')}"
+                else:
+                    # For regular users, use Name + UID
+                    content_signature = f"{comment_data['Name']}_{comment_data['UID']}"
+                
                 if content_signature in seen_content:
                     print("  ✗ Skipped: duplicate user")
                     continue
@@ -820,7 +844,7 @@ class FacebookGroupsScraper:
         return comments
 
     def extract_comment_data_focused(self, element, index):
-        """FOCUSED comment data extraction"""
+        """FOCUSED comment data extraction with PostLink from time clicks"""
         try:
             full_text = element.text.strip()
             if len(full_text) < 5:
@@ -829,17 +853,30 @@ class FacebookGroupsScraper:
             
             print(f"  Processing: '{full_text[:60]}...'")
             
-            # Note: Do not skip comments containing 'anonymous'. Some groups label names like
-            # 'Anonymous participant 505'. We'll try to extract a meaningful name instead.
-            
             username = "Unknown"
             profile_href = ""
             uid = "Unknown"
+            comment_link = ""  # FIXED: Added PostLink extraction
             
-            # FOCUSED: Enhanced username extraction
+            # FIXED: Check for anonymous users first - keep them as "Unknown"
+            is_anonymous = any(keyword in full_text.lower() for keyword in [
+                'ẩn danh', 
+                'người tham gia ẩn danh', 
+                'anonymous participant',
+                'anonymous user',
+                'anonymous member'
+            ])
+            
+            if is_anonymous:
+                print(f"      🔍 FIXED: Detected anonymous user, setting name to 'Unknown'")
+                username = "Unknown"  # FIXED: Always use "Unknown" for anonymous
+                uid = "Anonymous"  # Special UID for anonymous users
+                # Still try to extract PostLink from time clicks for anonymous users
+            
+            # FOCUSED: Enhanced username and PostLink extraction
             print(f"    🎯 FOCUSED analysis of element structure...")
             
-            # Method 1: Get ALL links and analyze each one
+            # Method 1: Get ALL links and analyze each one (including for anonymous users)
             try:
                 all_links = element.find_elements(By.XPATH, ".//a")
                 print(f"    Found {len(all_links)} total links in element")
@@ -851,12 +888,47 @@ class FacebookGroupsScraper:
                         
                         print(f"      Link {link_index+1}: Text='{link_text}' | Href={link_href[:60]}...")
                         
-                        # Check if this is a Facebook profile link
-                        if ('facebook.com' in link_href and 
-                            ('profile.php' in link_href or '/user/' in link_href or 'user.php' in link_href)):
+                        # FIXED: Check for time-based PostLink FIRST (higher priority) - works for all users
+                        if ('facebook.com' in link_href and 'comment_id=' in link_href and 
+                            '/groups/' in link_href and '/posts/' in link_href):
                             
-                            # Enhanced name validation
-                            if (link_text and 
+                            # Check if this looks like a time link
+                            time_patterns = [
+                                r'\d+\s*(ngày|giờ|phút|giây|tuần|tháng|năm)',  # Vietnamese time
+                                r'\d+\s*(day|hour|min|sec|week|month|year)s?',  # English time
+                                r'\d+\s*[hdmwy]$',  # Short format: 1h, 2d, 3m, etc.
+                                r'(just now|vừa xong|bây giờ|now)',  # "Just now" patterns
+                            ]
+                            
+                            is_time_text = any(re.search(pattern, link_text.lower()) for pattern in time_patterns)
+                            
+                            # Also check for short time text (like "21 giờ")
+                            if not is_time_text and link_text and len(link_text) <= 20:
+                                # Additional time indicators
+                                time_indicators = ['ago', 'trước', 'giờ', 'ngày', 'phút', 'h', 'm', 'd', 'w', 'y']
+                                is_time_text = any(indicator in link_text.lower() for indicator in time_indicators)
+                            
+                            if is_time_text:
+                                # Clean the URL
+                                comment_link = link_href.replace('&amp;', '&')
+                                print(f"      🔗 FIXED: Found PostLink from time: '{link_text}' -> {comment_link[:80]}...")
+                        
+                        # FIXED: Check for profile link - only for non-anonymous users
+                        elif (not is_anonymous and link_href and 
+                              (('facebook.com' in link_href and 
+                                ('profile.php' in link_href or '/user/' in link_href or 'user.php' in link_href or
+                                 re.search(r'facebook\.com/[^/?&]+/?$', link_href))) or
+                                # FIXED: Also check for relative URLs like /groups/.../user/{UID}/
+                                (link_href.startswith('/groups/') and '/user/' in link_href) or
+                                # FIXED: Check for any href with /user/ pattern
+                                ('/user/' in link_href and link_href != ''))):
+                            
+                            print(f"        🔍 FIXED: Analyzing potential profile link...")
+                            print(f"        🔍 Link text: '{link_text}'")
+                            print(f"        🔍 Link href: '{link_href}'")
+                            
+                            # FIXED: Enhanced name validation first
+                            is_valid_name = (link_text and 
                                 len(link_text) >= 2 and 
                                 len(link_text) <= 100 and
                                 not link_text.isdigit() and
@@ -866,28 +938,85 @@ class FacebookGroupsScraper:
                                     'chia sẻ', 'bình luận', 'ago', 'trước', 'min', 'hour', 
                                     'day', 'phút', 'giờ', 'ngày', 'ẩn danh', 'anonymous',
                                     'view', 'xem', 'show', 'hiển thị', 'see more', 'view more'
-                                ])):
+                                ]))
+                            
+                            if is_valid_name:
+                                print(f"        ✅ FIXED: Valid name found: '{link_text}'")
                                 
-                                username = link_text
-                                profile_href = link_href
-                                
-                                # Extract UID from URL
+                                # FIXED: Enhanced UID extraction with Groups user pattern FIRST
+                                extracted_uid = "Unknown"
                                 uid_patterns = [
+                                    # FIXED: Groups user pattern (highest priority) - matches your exact example
+                                    r'/groups/\d+/user/(\d+)/',           # /groups/123/user/456/
+                                    r'/groups/\d+/user/(\d+)\?',          # /groups/123/user/456?params
+                                    r'/groups/\d+/user/(\d+)$',           # /groups/123/user/456
+                                    r'/groups/[^/]+/user/(\d+)/',         # /groups/name/user/456/
+                                    r'/groups/[^/]+/user/(\d+)\?',        # /groups/name/user/456?params
+                                    r'/groups/[^/]+/user/(\d+)$',         # /groups/name/user/456
+                                    # General user patterns
+                                    r'/user/(\d+)/',                      # /user/456/
+                                    r'/user/(\d+)\?',                     # /user/456?params
+                                    r'/user/(\d+)$',                      # /user/456
+                                    # Standard patterns
                                     r'profile\.php\?id=(\d+)',
                                     r'user\.php\?id=(\d+)',
-                                    r'/user/(\d+)',
-                                    r'id=(\d+)',
-                                    r'(\d{10,})'  # Facebook UIDs are usually 10+ digits
+                                    r'[?&]id=(\d+)',
+                                    r'facebook\.com/([^/?&]+)/?$',        # Username pattern
+                                    r'(\d{10,})'                          # Facebook UIDs are usually 10+ digits
                                 ]
                                 
-                                for pattern in uid_patterns:
-                                    uid_match = re.search(pattern, link_href)
-                                    if uid_match:
-                                        uid = uid_match.group(1)
-                                        break
+                                print(f"        🔍 FIXED: Testing {len(uid_patterns)} UID patterns against: {link_href}")
                                 
-                                print(f"      ✅ FOCUSED: Found valid profile: {username} -> UID: {uid}")
-                                break
+                                for pattern_idx, pattern in enumerate(uid_patterns, 1):
+                                    try:
+                                        print(f"        🔍 Testing pattern {pattern_idx}: {pattern}")
+                                        uid_match = re.search(pattern, link_href)
+                                        if uid_match:
+                                            potential_uid = uid_match.group(1)
+                                            print(f"        🎯 FIXED: Pattern {pattern_idx} ({pattern}) MATCHED: {potential_uid}")
+                                            
+                                            # Check if it's a numeric UID or username
+                                            if potential_uid.isdigit() and len(potential_uid) >= 8:
+                                                extracted_uid = potential_uid
+                                                print(f"        ✅ FIXED: Successfully extracted UID from pattern {pattern_idx}: {extracted_uid}")
+                                                break
+                                            elif not potential_uid.isdigit() and len(potential_uid) >= 3:
+                                                extracted_uid = f"username:{potential_uid}"
+                                                print(f"        ✅ FIXED: Successfully extracted username from pattern {pattern_idx}: {potential_uid}")
+                                                break
+                                            else:
+                                                print(f"        ❌ FIXED: Pattern matched but invalid UID: {potential_uid}")
+                                        else:
+                                            print(f"        ❌ Pattern {pattern_idx} no match")
+                                                
+                                    except Exception as e:
+                                        print(f"        ⚠️ Pattern {pattern_idx} failed: {e}")
+                                        continue
+                                
+                                print(f"        🎯 FIXED: Final extracted_uid after all patterns: {extracted_uid}")
+                                
+                                # Update user info if UID was extracted (only for non-anonymous)
+                                if extracted_uid != "Unknown" and not is_anonymous:
+                                    username = link_text  # Only update username for non-anonymous
+                                    uid = extracted_uid  # Use the extracted UID
+                                    
+                                    # FIXED: Convert relative URL to full URL for consistency
+                                    if link_href.startswith('/'):
+                                        profile_href = f"https://www.facebook.com{link_href}"
+                                    else:
+                                        profile_href = link_href
+                                    
+                                    print(f"      ✅ FIXED: Successfully updated profile: {username} -> UID: {uid}")
+                                    print(f"      🔗 FIXED: Profile URL: {profile_href}")
+                                    
+                                    # Break after finding the first valid profile with UID
+                                    break
+                                elif is_anonymous:
+                                    print(f"        🔍 FIXED: Anonymous user - not updating profile info, keeping name as 'Unknown'")
+                                else:
+                                    print(f"        ⚠️ FIXED: Valid name '{link_text}' but no UID extracted from: {link_href}")
+                            else:
+                                print(f"        ❌ FIXED: Invalid name: '{link_text}'")
                                 
                     except Exception as e:
                         print(f"      Error processing link {link_index+1}: {e}")
@@ -896,8 +1025,8 @@ class FacebookGroupsScraper:
             except Exception as e:
                 print(f"    Error in focused method: {e}")
             
-            # Fallback: If no username from links, try using the first line of the first child element's text
-            if username == "Unknown":
+            # FIXED: Fallback - only for non-anonymous users who don't have username yet
+            if username == "Unknown" and not is_anonymous:
                 try:
                     children = element.find_elements(By.XPATH, "./*")
                     if children:
@@ -905,24 +1034,34 @@ class FacebookGroupsScraper:
                         if first_child_text:
                             first_line = first_child_text.splitlines()[0].strip()
                             # Basic validation for a plausible name line
-                            if first_line and 2 <= len(first_line) <= 120 and not first_line.startswith("http"):
+                            if (first_line and 2 <= len(first_line) <= 120 and 
+                                not first_line.startswith("http") and
+                                not any(keyword in first_line.lower() for keyword in ['anonymous', 'ẩn danh'])):
                                 username = first_line
                                 print(f"      ✅ Fallback name from first child: {username}")
                 except Exception as e:
                     print(f"      ⚠️ Fallback name extraction error: {e}")
+            elif is_anonymous:
+                print(f"      🔍 FIXED: Anonymous user - keeping name as 'Unknown', not using fallback")
 
-            # Final validation
-            if username == "Unknown":
-                print("  ❌ FOCUSED extraction failed for this element")
+            # FIXED: Final validation - allow anonymous users with "Unknown" name
+            if username == "Unknown" and not is_anonymous:
+                # Only skip if we couldn't extract username AND it's not anonymous
+                print("  ❌ FOCUSED extraction failed for this element (not anonymous, no username found)")
                 return None
+            elif is_anonymous:
+                print("  ✅ FIXED: Keeping anonymous user with name 'Unknown'")
                 
             print(f"  ✅ FOCUSED: Successfully extracted username: {username}")
+            if comment_link:
+                print(f"  🔗 FOCUSED: PostLink found: {comment_link[:80]}...")
             
             return {
                 "UID": uid,
                 "Name": username,
                 "ProfileLink": profile_href,
-                "CommentLink": "",
+                "CommentLink": comment_link,  # FIXED: Now includes PostLink from time clicks
+                "PostLink": comment_link,     # FIXED: Added PostLink field for consistency
                 "ElementIndex": index,
                 "TextPreview": full_text[:100] + "..." if len(full_text) > 100 else full_text,
                 "ContainerHeight": "Focused on larger height container"
@@ -967,7 +1106,7 @@ class FacebookGroupsScraper:
 class FBGroupsAppGUI:
     def __init__(self, root):
         self.root = root
-        root.title("🎯 FB Groups Comment Scraper - FOCUSED")
+        root.title("🎯 FB Groups Comment Scraper - FIXED PostLink")
         root.geometry("1100x950")
         root.configure(bg="#121212")
 
@@ -979,11 +1118,11 @@ class FBGroupsAppGUI:
         header_frame = tk.Frame(main_frame, bg="#121212")
         header_frame.pack(fill="x", pady=(0,20))
         
-        title_label = tk.Label(header_frame, text="🎯 Facebook Groups Comment Scraper - FOCUSED", 
+        title_label = tk.Label(header_frame, text="🎯 Facebook Groups Comment Scraper - FIXED UID + PostLink", 
                               font=("Arial", 20, "bold"), bg="#121212", fg="#a5d6a7")
         title_label.pack()
         
-        subtitle_label = tk.Label(header_frame, text="🎯 Focused version - Targets larger height container (3161px vs 924px)", 
+        subtitle_label = tk.Label(header_frame, text="🆔 FIXED UID extraction + 🔗 PostLink từ thời gian + 👻 Anonymous users support", 
                                  font=("Arial", 11), bg="#121212", fg="#b0b0b0")
         subtitle_label.pack(pady=(5,0))
 
@@ -1045,11 +1184,11 @@ class FBGroupsAppGUI:
                                     bg="#121212", fg="#a5d6a7", relief="groove", bd=2)
         status_frame.pack(fill="x", pady=(0,15))
         
-        self.lbl_status = tk.Label(status_frame, text="✅ FIXED scraper sẵn sàng - Đã fix lỗi username extraction", fg="#28a745", 
+        self.lbl_status = tk.Label(status_frame, text="✅ FIXED PostLink scraper sẵn sàng - Lấy đúng link comment từ thời gian!", fg="#28a745", 
                                   wraplength=900, justify="left", font=("Arial", 11), bg="#121212")
         self.lbl_status.pack(anchor="w", padx=15, pady=(15,5))
 
-        self.lbl_progress_detail = tk.Label(status_frame, text="💡 FIXED features: 1) Better link analysis, 2) Enhanced debugging output, 3) Multiple extraction fallbacks, 4) Debug file generation",
+        self.lbl_progress_detail = tk.Label(status_frame, text="🆔 FIXED UID + PostLink features: 1) Groups user pattern (/groups/.../user/{UID}/), 2) Time click detection, 3) Anonymous users support (Unknown name), 4) Smart deduplication, 5) Enhanced debugging",
                                           fg="#b0b0b0", wraplength=900, justify="left", font=("Arial", 9), bg="#121212")
         self.lbl_progress_detail.pack(anchor="w", padx=15, pady=(0,10))
 
@@ -1314,22 +1453,30 @@ class FBGroupsAppGUI:
                 else:
                     df.to_excel(file_out, index=False, engine="openpyxl")
                 
-                # Statistics
+                # FIXED: Enhanced statistics with PostLink and UID tracking
                 unique_users = len(set(c['Name'] for c in comments if c['Name'] != 'Unknown'))
                 profile_links = len([c for c in comments if c['ProfileLink']])
-                uid_count = len([c for c in comments if c['UID'] != 'Unknown'])
+                uid_count = len([c for c in comments if c['UID'] != 'Unknown' and not c['UID'].startswith('username:') and c['UID'] != 'Anonymous'])  # FIXED: Real UIDs only
+                username_count = len([c for c in comments if c['UID'].startswith('username:')])  # FIXED: Username count
+                anonymous_count = len([c for c in comments if c['UID'] == 'Anonymous'])  # FIXED: Anonymous count
+                post_links = len([c for c in comments if c.get('PostLink')])  # FIXED: Count PostLinks
+                comment_links = len([c for c in comments if c.get('CommentLink')])  # FIXED: Count CommentLinks
                 
                 self.lbl_status.config(text=f"🎉 FIXED GROUPS SCRAPING HOÀN THÀNH!", fg="#28a745")
-                self.lbl_progress_detail.config(text=f"📊 FIXED Results: {len(comments)} comments | {unique_users} unique users | {profile_links} profile links | {uid_count} UIDs | Layout: {layout} | File: {file_out}")
+                self.lbl_progress_detail.config(text=f"📊 FIXED Results: {len(comments)} comments | {unique_users} named users | {anonymous_count} anonymous | {uid_count} UIDs | {post_links} PostLinks | Layout: {layout}")
                 
                 print(f"🎯 FIXED SCRAPING COMPLETE!")
                 print(f"   📊 Results: {len(comments)} total comments")
                 print(f"   👥 Unique users: {unique_users}")
                 print(f"   🔗 Profile links: {profile_links}")
-                print(f"   🆔 UIDs extracted: {uid_count}")
+                print(f"   🆔 Real UIDs extracted: {uid_count}")  # FIXED: Specify real UIDs
+                print(f"   👤 Usernames (not converted): {username_count}")  # FIXED: Username count
+                print(f"   👻 Anonymous users: {anonymous_count}")  # FIXED: Anonymous count
+                print(f"   🔗 PostLinks (time clicks): {post_links}")
+                print(f"   💬 CommentLinks: {comment_links}")
                 print(f"   📱 Layout used: {layout}")
                 print(f"   💾 Saved to: {file_out}")
-                print(f"   🔍 Debug files: debug_groups_{layout}.html + debug_failed_element_*.html")
+                print(f"   🔍 Debug files: debug_focused_{layout}.html")
                 
             else:
                 self.lbl_status.config(text="⚠️ Không tìm thấy comment với FIXED logic", fg="#ffc107")
