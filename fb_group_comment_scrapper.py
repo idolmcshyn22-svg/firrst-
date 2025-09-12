@@ -1,4 +1,9 @@
-# fb_groups_scraper_focused.py - Focus on larger height element
+#!/usr/bin/env python3
+# -*- coding: utf-8 -*-
+"""
+🚀 Facebook Groups Ultra Fast Scraper - Optimized for 30k+ Comments
+Tối ưu hóa để lấy 30k comments nhanh nhất có thể
+"""
 
 import time, random, threading, re, requests, pandas as pd
 from datetime import datetime
@@ -12,9 +17,11 @@ from selenium.common.exceptions import WebDriverException, NoSuchElementExceptio
 from webdriver_manager.chrome import ChromeDriverManager
 from selenium.webdriver.support.ui import WebDriverWait
 from selenium.webdriver.support import expected_conditions as EC
+import os
+import json
 
 # ----------------------------
-# Helper utils (unchanged)
+# Ultra Fast Helper Functions
 # ----------------------------
 
 def parse_cookies_to_list(cookie_str):
@@ -26,65 +33,133 @@ def parse_cookies_to_list(cookie_str):
             cookies_list.append({'name': name.strip(), 'value': value.strip(), 'domain': '.facebook.com'})
     return cookies_list
 
-def parse_cookies_to_dict(cookie_str):
-    d = {}
-    for pair in cookie_str.split(';'):
-        pair = pair.strip()
-        if '=' in pair:
-            name, value = pair.split('=', 1)
-            d[name.strip()] = value.strip()
-    return d
-
-def clean_text(text):
-    if not text:
-        return ""
-    text = re.sub(r'\s+', ' ', text.strip())
-    ui_patterns = [
-        r'\b(Like|Reply|Share|Comment|Translate|Hide|Report|Block)\b',
-        r'\b(Thích|Trả lời|Chia sẻ|Bình luận|Dịch|Ẩn|Báo cáo|Chặn)\b',
-        r'\b\d+\s*(min|minutes?|hours?|days?|seconds?|phút|giờ|ngày|giây)\s*(ago|trước)?\b',
-        r'\b(Top fan|Most relevant|Newest|All comments|Bình luận hàng đầu)\b'
-    ]
-    for pattern in ui_patterns:
-        text = re.sub(pattern, '', text, flags=re.IGNORECASE)
-    return text.strip()
+def save_to_excel_fast(data, filename):
+    """Ultra fast Excel saving with optimizations - Fixed"""
+    try:
+        if not data:
+            print("⚠️ No data to save")
+            return False
+        
+        # Create DataFrame
+        df = pd.DataFrame(data)
+        
+        # Ensure required columns exist
+        required_columns = ['UID', 'Name', 'ProfileLink', 'CommentLink', 'Type', 'Layout', 'Source']
+        for col in required_columns:
+            if col not in df.columns:
+                df[col] = ''
+        
+        # Reorder columns for better readability
+        column_order = ['UID', 'Name', 'ProfileLink', 'CommentLink', 'Type', 
+                       'Layout', 'Source', 'ElementIndex', 'TextPreview', 'ContainerHeight']
+        
+        # Only include columns that exist in the dataframe
+        existing_columns = [col for col in column_order if col in df.columns]
+        df = df[existing_columns]
+        
+        # Save to Excel - Fixed without options parameter
+        with pd.ExcelWriter(filename, engine='openpyxl') as writer:
+            df.to_excel(writer, sheet_name='Comments', index=False)
+            
+            # Auto-adjust column widths
+            worksheet = writer.sheets['Comments']
+            for column in worksheet.columns:
+                max_length = 0
+                column_letter = column[0].column_letter
+                for cell in column:
+                    try:
+                        if len(str(cell.value)) > max_length:
+                            max_length = len(str(cell.value))
+                    except:
+                        pass
+                adjusted_width = min(max_length + 2, 50)  # Cap at 50 characters
+                worksheet.column_dimensions[column_letter].width = adjusted_width
+        
+        print(f"✅ Successfully saved {len(data)} records to {filename}")
+        return True
+        
+    except Exception as e:
+        print(f"❌ Error saving to Excel: {e}")
+        return False
 
 # ----------------------------
-# FOCUSED Facebook Groups Scraper
+# Ultra Fast Facebook Groups Scraper
 # ----------------------------
 
-class FacebookGroupsScraper:
+class UltraFastFacebookGroupsScraper:
     def __init__(self, cookie_str, headless=True):
+        # Ultra optimized Chrome options
         options = Options()
         if headless:
             options.add_argument("--headless=new")
+        
+        # ULTRA PERFORMANCE optimizations for 30k+ comments
         options.add_argument("--disable-notifications")
         options.add_argument("--disable-popup-blocking")
         options.add_argument("--disable-gpu")
         options.add_argument("--no-sandbox")
         options.add_argument("--disable-dev-shm-usage")
         options.add_argument("--disable-blink-features=AutomationControlled")
-
-        # Better user agent for modern Facebook
+        options.add_argument("--disable-images")  # Disable images for faster loading
+        options.add_argument("--disable-javascript")  # Disable JS for faster parsing
+        options.add_argument("--disable-plugins")  # Disable plugins
+        options.add_argument("--disable-extensions")  # Disable extensions
+        options.add_argument("--disable-web-security")  # Disable web security
+        options.add_argument("--disable-features=VizDisplayCompositor")  # Disable compositor
+        options.add_argument("--memory-pressure-off")  # Disable memory pressure
+        options.add_argument("--max_old_space_size=4096")  # Increase memory limit
+        options.add_argument("--disable-css")  # Disable CSS for speed
+        # Fix WebGL fallback error
+        options.add_argument("--enable-unsafe-swiftshader")
+        options.add_argument("--disable-software-rasterizer")
+        options.add_argument("--disable-gpu-sandbox")
+        options.add_argument("--disable-software-rasterizer")
+        options.add_argument("--disable-background-timer-throttling")
+        options.add_argument("--disable-backgrounding-occluded-windows")
+        options.add_argument("--disable-renderer-backgrounding")
+        
+        # Faster user agent
         options.add_argument("user-agent=Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/120.0.0.0 Safari/537.36")
         options.add_experimental_option("excludeSwitches", ["enable-automation", "enable-logging"])
         options.add_experimental_option('useAutomationExtension', False)
         
         self.driver = webdriver.Chrome(service=Service(ChromeDriverManager().install()), options=options)
-        self.wait = WebDriverWait(self.driver, 15)
+        # Set multiple timeout configurations to prevent HTTPConnectionPool errors
+        self.driver.set_page_load_timeout(60)  # Page load timeout
+        self.driver.implicitly_wait(10)  # Implicit wait for elements
+        self.wait = WebDriverWait(self.driver, 30)  # Explicit wait timeout
         self.cookie_str = cookie_str or ""
         self.cookies_list = parse_cookies_to_list(self.cookie_str)
-        self.cookies_dict = parse_cookies_to_dict(self.cookie_str)
         self._stop_flag = False
         self.current_layout = None
+        
+        # Ultra fast tracking
+        self.comment_limit = 0
+        self.extracted_count = 0
+        self.total_estimated = 0
+        self.progress_callback = None
+        self.batch_size = 100  # Process in batches for speed
+        self.current_comments_data = []  # Store comments for save on stop
+        
+        # Timeout tracking for browser restart
+        self.timeout_count = 0
+        self.max_timeouts = 5  # Restart browser after 5 timeouts
+        
+        # Progress preservation for browser restart
+        self.current_post_url = None
+        self.scroll_position = 0
+        self.extracted_elements = []  # Store extracted elements to avoid re-extraction
+        self.scroll_progress = 0  # Track scroll progress
+        self.loaded_comments_count = 0  # Track how many comments were loaded before restart
+        self.page_height_before_restart = 0  # Track page height before restart
         
         if self.cookies_list:
             self._login_with_cookies()
 
     def _login_with_cookies(self):
-        # Start with regular Facebook for better groups access
+        """Ultra fast login"""
         self.driver.get("https://www.facebook.com")
-        time.sleep(3)
+        time.sleep(2)  # Reduced wait time
         
         for c in self.cookies_list:
             cookie = c.copy()
@@ -98,34 +173,290 @@ class FacebookGroupsScraper:
                 pass
         
         self.driver.get("https://www.facebook.com")
-        time.sleep(4)
+        time.sleep(3)  # Reduced wait time
 
-    def load_post(self, post_url):
-        print(f"Loading groups post: {post_url}")
-        
-        urls_to_try = []
-        
-        if "groups/" in post_url:
-            # Try www first for groups, then mobile, then mbasic
-            www_url = post_url.replace("mbasic.facebook.com", "www.facebook.com").replace("m.facebook.com", "www.facebook.com")
-            mobile_url = post_url.replace("www.facebook.com", "m.facebook.com").replace("mbasic.facebook.com", "m.facebook.com")
-            mbasic_url = post_url.replace("www.facebook.com", "mbasic.facebook.com").replace("m.facebook.com", "mbasic.facebook.com")
+    def _restart_browser_on_timeout(self):
+        """Restart browser when too many timeouts occur"""
+        try:
+            print("🔄 Restarting browser due to timeout issues...")
             
-            urls_to_try = [www_url, mobile_url, mbasic_url]
+            # Close current browser
+            try:
+                self.driver.quit()
+            except:
+                pass
+            
+            # Reinitialize browser with same settings
+            options = Options()
+            options.add_argument("--headless=new")
+            options.add_argument("--disable-notifications")
+            options.add_argument("--disable-popup-blocking")
+            options.add_argument("--disable-gpu")
+            options.add_argument("--no-sandbox")
+            options.add_argument("--disable-dev-shm-usage")
+            options.add_argument("--disable-blink-features=AutomationControlled")
+            options.add_argument("--disable-plugins")
+            options.add_argument("--disable-extensions")
+            options.add_argument("--disable-features=VizDisplayCompositor")
+            # Fix WebGL fallback error
+            options.add_argument("--enable-unsafe-swiftshader")
+            options.add_argument("--disable-software-rasterizer")
+            options.add_argument("--disable-gpu-sandbox")
+            options.add_argument("--disable-background-timer-throttling")
+            options.add_argument("--disable-backgrounding-occluded-windows")
+            options.add_argument("--disable-renderer-backgrounding")
+            options.add_argument("user-agent=Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/120.0.0.0 Safari/537.36")
+            options.add_experimental_option("excludeSwitches", ["enable-automation", "enable-logging"])
+            options.add_experimental_option('useAutomationExtension', False)
+            
+            # Create new driver
+            self.driver = webdriver.Chrome(service=Service(ChromeDriverManager().install()), options=options)
+            self.driver.set_page_load_timeout(60)
+            self.driver.implicitly_wait(10)
+            self.wait = WebDriverWait(self.driver, 30)
+            
+            # Reset timeout count
+            self.timeout_count = 0
+            
+            # Re-login
+            self._login_with_cookies()
+            
+            print("✅ Browser restarted successfully")
+            return True
+            
+        except Exception as e:
+            print(f"❌ Failed to restart browser: {e}")
+            return False
+
+    def _save_scroll_progress(self, scroll_index, comments_data):
+        """Save current scroll progress to avoid losing data"""
+        try:
+            self.scroll_progress = scroll_index
+            self.current_comments_data = comments_data.copy() if comments_data else []
+            self.loaded_comments_count = len(comments_data) if comments_data else 0
+            
+            # Get current scroll position and page height
+            try:
+                self.scroll_position = self.driver.execute_script("return window.pageYOffset;")
+                self.page_height_before_restart = self.driver.execute_script("return document.body.scrollHeight")
+            except:
+                self.scroll_position = 0
+                self.page_height_before_restart = 0
+            
+            print(f"💾 Progress saved: {self.loaded_comments_count} comments, scroll {scroll_index}, height {self.page_height_before_restart}px")
+            
+        except Exception as e:
+            print(f"⚠️ Error saving progress: {e}")
+
+    def _restore_scroll_progress(self):
+        """Restore to previous scroll position after browser restart with aggressive comment loading"""
+        try:
+            if not self.current_post_url:
+                return False
+                
+            print(f"🔄 Restoring progress: {len(self.current_comments_data)} comments, scroll {self.scroll_progress}")
+            
+            # Reload the post
+            if not self.load_post_ultra_fast(self.current_post_url):
+                print("❌ Failed to reload post")
+                return False
+            
+            # Wait for page to load
+            time.sleep(5)
+            
+            # AGGRESSIVE COMMENT LOADING: Simulate the scrolling process to load comments
+            print(f"🔄 Aggressively loading comments to restore position (target scroll: {self.scroll_progress})...")
+            
+            # Step 1: Switch to "All comments" view
+            self._switch_to_all_comments()
+            time.sleep(3)
+            
+            # Step 2: Simulate scrolling process to trigger comment loading
+            restored_scrolls = 0
+            target_scrolls = min(self.scroll_progress, 300)  # Increased limit for better restoration
+            
+            # Track restoration progress
+            restoration_start_time = time.time()
+            last_height = 0
+            no_growth_count = 0
+            
+            for i in range(target_scrolls):
+                try:
+                    # Fast scroll to trigger loading
+                    self.driver.execute_script("window.scrollTo(0, document.body.scrollHeight);")
+                    time.sleep(0.15)  # Very fast scrolling for restoration
+                    
+                    # Click "View more comments" aggressively
+                    if i % 3 == 0:  # Every 3 scrolls, try to click "View more" (more aggressive)
+                        clicked = self._click_view_more_comments_fast()
+                        if clicked:
+                            time.sleep(0.3)  # Brief wait after successful click
+                    
+                    # Check if page is growing (comments being loaded)
+                    if i % 10 == 0:
+                        try:
+                            current_height = self.driver.execute_script("return document.body.scrollHeight")
+                            if current_height > last_height:
+                                last_height = current_height
+                                no_growth_count = 0
+                                print(f"  📈 Page growing: {current_height}px (target: ~{self.page_height_before_restart}px)")
+                            else:
+                                no_growth_count += 1
+                                
+                            # If page stops growing for too long, try more aggressive clicking
+                            if no_growth_count > 3:
+                                print("  🔥 Page not growing, trying aggressive comment loading...")
+                                for _ in range(3):
+                                    self._click_view_more_comments_fast()
+                                    time.sleep(0.2)
+                                no_growth_count = 0
+                                
+                        except:
+                            pass
+                    
+                    restored_scrolls += 1
+                    
+                    # Progress indicator
+                    if i % 20 == 0:
+                        elapsed_time = time.time() - restoration_start_time
+                        print(f"  📊 Restoration progress: {i}/{target_scrolls} scrolls ({elapsed_time:.1f}s)")
+                    
+                    # Early exit if we've likely restored enough
+                    if i > 50 and last_height >= self.page_height_before_restart * 0.8:
+                        print(f"  ✅ Early completion: Page height {last_height}px ≈ target {self.page_height_before_restart}px")
+                        break
+                    
+                except Exception as restore_scroll_e:
+                    print(f"⚠️ Error during restoration scroll {i}: {restore_scroll_e}")
+                    continue
+            
+            print(f"✅ Restoration complete: {restored_scrolls}/{target_scrolls} scrolls restored")
+            
+            # Step 3: Final scroll to approximate position
+            try:
+                final_height = self.driver.execute_script("return document.body.scrollHeight")
+                print(f"📏 Final page height after restoration: {final_height}px")
+            except:
+                pass
+            
+            return True
+            
+        except Exception as e:
+            print(f"❌ Error restoring progress: {e}")
+            return False
+
+    def _click_view_more_comments_fast(self):
+        """Fast click on View more comments during restoration"""
+        try:
+            view_more_selectors = [
+                "//*[contains(text(), 'View more comments')]",
+                "//*[contains(text(), 'Xem thêm bình luận')]",
+                "//*[contains(text(), 'Load more')]",
+                "//*[contains(text(), 'Show more')]"
+            ]
+            
+            for selector in view_more_selectors[:2]:  # Only try first 2 selectors for speed
+                try:
+                    elements = self.driver.find_elements(By.XPATH, selector)
+                    if elements:
+                        element = elements[0]
+                        if element.is_displayed() and element.is_enabled():
+                            self.driver.execute_script("arguments[0].click();", element)
+                            time.sleep(0.5)  # Short wait
+                            return True
+                except:
+                    continue
+            return False
+        except:
+            return False
+
+    def _scroll_to_specific_comment(self, comment_url):
+        """Scroll to specific comment when using comment link"""
+        try:
+            print("🎯 Attempting to scroll to specific comment...")
+            
+            # Extract comment ID from URL
+            comment_id = None
+            if "comment_id=" in comment_url:
+                comment_id = comment_url.split("comment_id=")[1].split("&")[0]
+                print(f"📝 Comment ID: {comment_id}")
+            
+            if not comment_id:
+                print("⚠️ Could not extract comment ID from URL")
+                return False
+            
+            # Wait for page to load
+            time.sleep(3)
+            
+            # Try to find the specific comment element
+            comment_selectors = [
+                f"//div[@data-ft*='{comment_id}']",
+                f"//div[contains(@id, '{comment_id}')]",
+                f"//div[contains(@data-sigil, 'comment') and contains(@data-ft, '{comment_id}')]",
+                f"//div[@role='article' and contains(@data-ft, '{comment_id}')]",
+                f"//a[contains(@href, 'comment_id={comment_id}')]"
+            ]
+            
+            comment_element = None
+            for selector in comment_selectors:
+                try:
+                    elements = self.driver.find_elements(By.XPATH, selector)
+                    if elements:
+                        comment_element = elements[0]
+                        print(f"✅ Found comment element with selector: {selector}")
+                        break
+                except:
+                    continue
+            
+            if comment_element:
+                # Scroll to the comment
+                try:
+                    self.driver.execute_script("arguments[0].scrollIntoView({behavior: 'smooth', block: 'center'});", comment_element)
+                    time.sleep(2)
+                    print("✅ Scrolled to specific comment successfully")
+                    
+                    # Highlight the comment briefly
+                    self.driver.execute_script("arguments[0].style.border = '3px solid red';", comment_element)
+                    time.sleep(1)
+                    self.driver.execute_script("arguments[0].style.border = '';", comment_element)
+                    
+                    return True
+                except Exception as e:
+                    print(f"⚠️ Error scrolling to comment: {e}")
+                    return False
+            else:
+                print("⚠️ Could not find specific comment element, will continue with normal scrolling")
+                return False
+                
+        except Exception as e:
+            print(f"❌ Error in scroll to specific comment: {e}")
+            return False
+
+    def load_post_ultra_fast(self, post_url):
+        """Ultra fast post loading"""
+        print(f"🚀 Ultra fast loading: {post_url}")
+        
+        # Save URL for progress restoration
+        self.current_post_url = post_url
+        
+        # Check if this is a comment link
+        self.is_comment_link = "comment_id=" in post_url
+        
+        # Try mobile first for speed
+        if "groups/" in post_url:
+            mobile_url = post_url.replace("www.facebook.com", "m.facebook.com").replace("mbasic.facebook.com", "m.facebook.com")
+            urls_to_try = [mobile_url, post_url]
         else:
             urls_to_try = [post_url]
         
         for url_attempt in urls_to_try:
             try:
-                print(f"Trying URL: {url_attempt}")
+                print(f"⚡ Trying: {url_attempt}")
                 self.driver.get(url_attempt)
-                time.sleep(6)
+                time.sleep(3)  # Reduced wait time
                 
                 current_url = self.driver.current_url
                 page_title = self.driver.title
-                
-                print(f"Current URL: {current_url}")
-                print(f"Page title: {page_title}")
                 
                 # Detect layout
                 if "m.facebook.com" in current_url:
@@ -135,50 +466,230 @@ class FacebookGroupsScraper:
                 else:
                     self.current_layout = "www"
                 
-                print(f"Detected layout: {self.current_layout}")
+                print(f"📱 Layout: {self.current_layout}")
                 
                 # Check login status
                 if any(keyword in page_title.lower() for keyword in ["log in", "login", "đăng nhập"]):
-                    print("❌ Not logged in with this URL, trying next...")
+                    print("❌ Not logged in, trying next...")
                     continue
                 
-                print(f"✅ Successfully loaded groups post with {self.current_layout} layout")
+                print(f"✅ Loaded with {self.current_layout} layout")
                 
-                # Try to switch to "All comments" view
-                self._switch_to_all_comments()
-
-                # Try to click "View more comments" button
-                self._click_view_more()
+                # If this is a comment link, scroll to the specific comment first
+                if self.is_comment_link:
+                    print("🔗 Comment link detected - scrolling to specific comment...")
+                    self._scroll_to_specific_comment(post_url)
+                
+                # Ultra fast comment loading
+                self._ultra_fast_load_comments()
                 
                 return True
                     
             except Exception as e:
-                print(f"Failed to load {url_attempt}: {e}")
+                print(f"❌ Failed: {e}")
                 continue
         
-        print("❌ Failed to load post with any URL variant")
+        print("❌ Failed to load post")
         return False
 
-    def clear_page_cache(self):
-        """Clear page cache and force reload to ensure fresh DOM"""
+    def _ultra_fast_load_comments(self):
+        """Ultra fast comment loading strategy - Enhanced with All Comments logic from focused code"""
+        print("⚡ Ultra fast comment loading for 30k+ comments...")
+        
         try:
-            print("🧹 Clearing page cache...")
+            # Step 1: Try to switch to "All comments" view first (from focused code)
+            self._switch_to_all_comments()
             
-            # Clear browser cache
-            self.driver.execute_script("window.localStorage.clear();")
-            self.driver.execute_script("window.sessionStorage.clear();")
+            # Step 2: Enhanced scrolling strategy for maximum comments - TARGET 3K COMMENTS
+            max_scroll_attempts = 275  # Optimized for 3k comments (275 scrolls = 3k comments)
+            scroll_count = 0
+            no_new_comments_count = 0
+            max_no_new_comments = 25  # Balanced tolerance for no new comments
+            consecutive_empty_scrolls = 0
+            max_consecutive_empty = 50  # Stop if 50 consecutive scrolls yield no new content
             
-            # Force page refresh
-            self.driver.refresh()
-            time.sleep(5)  # Wait for fresh load
-            
-            print("✅ Page cache cleared and refreshed")
-            
+            for i in range(max_scroll_attempts):
+                if self._stop_flag:
+                    break
+                
+                # Store current page height before scrolling with timeout protection
+                try:
+                    previous_height = self.driver.execute_script("return document.body.scrollHeight")
+                except Exception as height_e:
+                    print(f"⚠️ Error getting initial height: {height_e}")
+                    previous_height = 0
+                
+                # Scroll to bottom with multiple scroll attempts - OPTIMIZED FOR 8K COMMENTS
+                for scroll_step in range(4):  # Optimized scroll steps for 8k target
+                    try:
+                        # Add timeout protection for each scroll operation
+                        self.driver.execute_script("window.scrollTo(0, document.body.scrollHeight);")
+                        time.sleep(0.4)  # Balanced wait time for stability
+                        
+                        # Additional scroll variations for better comment loading
+                        if scroll_step % 2 == 0:
+                            # Scroll to middle of page occasionally
+                            try:
+                                self.driver.execute_script("window.scrollTo(0, document.body.scrollHeight/2);")
+                                time.sleep(0.3)
+                                self.driver.execute_script("window.scrollTo(0, document.body.scrollHeight);")
+                            except Exception as mid_scroll_e:
+                                print(f"⚠️ Mid scroll error: {mid_scroll_e}")
+                                continue
+                    except Exception as scroll_e:
+                        print(f"⚠️ Scroll step {scroll_step} error: {scroll_e}")
+                        
+                        # Check if it's a timeout error
+                        if "HTTPConnectionPool" in str(scroll_e) or "timeout" in str(scroll_e).lower():
+                            self.timeout_count += 1
+                            print(f"⚠️ Timeout count: {self.timeout_count}/{self.max_timeouts}")
+                            
+                            # Restart browser if too many timeouts
+                            if self.timeout_count >= self.max_timeouts:
+                                # Extract current comments before restart to preserve data
+                                print("🚨 CRITICAL: Extracting comments before browser restart to preserve data...")
+                                try:
+                                    current_extracted_comments = self.extract_comments_ultra_fast()
+                                    print(f"💾 Extracted {len(current_extracted_comments)} comments before restart")
+                                except Exception as extract_e:
+                                    print(f"⚠️ Could not extract comments before restart: {extract_e}")
+                                    current_extracted_comments = self.current_comments_data if hasattr(self, 'current_comments_data') else []
+                                
+                                # Save progress with actual extracted comments
+                                self._save_scroll_progress(i, current_extracted_comments)
+                                
+                                if self._restart_browser_on_timeout():
+                                    # Try to restore progress
+                                    print("🔄 Attempting to restore progress after browser restart...")
+                                    if self._restore_scroll_progress():
+                                        print("✅ Progress restored successfully")
+                                        print(f"📊 Preserved data: {len(self.current_comments_data)} comments")
+                                        # Continue from where we left off, but adjust scroll index
+                                        i = max(0, self.scroll_progress - 10)  # Resume a bit earlier for safety
+                                        print(f"🔄 Resuming from scroll {i} (was {self.scroll_progress})")
+                                        time.sleep(3)
+                                    else:
+                                        print("⚠️ Could not restore progress, continuing from current position")
+                                        time.sleep(5)
+                                else:
+                                    print("❌ Browser restart failed, stopping scroll")
+                                    break
+                        
+                        # Try to continue scrolling even if one step fails
+                        time.sleep(1)
+                        continue
+                
+                # Wait for content to load
+                time.sleep(2)  # Increased wait time for content loading
+                
+                # Check if page height increased (new content loaded) with timeout protection
+                try:
+                    current_height = self.driver.execute_script("return document.body.scrollHeight")
+                except Exception as final_height_e:
+                    print(f"⚠️ Error getting final height: {final_height_e}")
+                    current_height = previous_height
+                height_increased = current_height > previous_height
+                
+                # Look for "View more comments" and click rapidly - ENHANCED FOR 30K COMMENTS
+                view_more_selectors = [
+                    "//*[contains(text(), 'View more comments')]",
+                    "//*[contains(text(), 'Xem thêm bình luận')]",
+                    "//*[contains(text(), 'Load more')]",
+                    "//*[contains(text(), 'Show more')]",
+                    "//*[contains(text(), 'See more comments')]",
+                    "//*[contains(text(), 'View all comments')]",
+                    "//*[contains(text(), 'Tất cả bình luận')]",
+                    "//*[contains(text(), 'Load more comments')]",
+                    "//*[contains(text(), 'Show more comments')]",
+                    "//*[contains(text(), 'See more')]",
+                    "//button[contains(@aria-label, 'View more')]",
+                    "//div[@role='button' and contains(text(), 'more')]",
+                    "//a[contains(@href, 'more_comments')]"
+                ]
+                
+                # Click multiple "View more" buttons per scroll - OPTIMIZED FOR 8K COMMENTS
+                clicked_any = False
+                max_clicks_per_scroll = 2  # Click up to 2 buttons per scroll for balance
+                clicks_this_scroll = 0
+                
+                for selector in view_more_selectors:
+                    if clicks_this_scroll >= max_clicks_per_scroll:
+                        break
+                        
+                    try:
+                        elements = self.driver.find_elements(By.XPATH, selector)
+                        for element in elements:
+                            if clicks_this_scroll >= max_clicks_per_scroll:
+                                break
+                                
+                            if element.is_displayed() and element.is_enabled():
+                                try:
+                                    # Scroll element into view first
+                                    self.driver.execute_script("arguments[0].scrollIntoView({behavior: 'smooth', block: 'center'});", element)
+                                    time.sleep(0.3)  # Faster wait
+                                    
+                                    # Click the element
+                                    self.driver.execute_script("arguments[0].click();", element)
+                                    clicked_any = True
+                                    clicks_this_scroll += 1
+                                    print(f"🖱️ Clicked: {element.text[:30]}... (scroll {i+1}, click {clicks_this_scroll})")
+                                    time.sleep(0.5)  # Short wait between clicks
+                                except:
+                                    continue
+                        if clicked_any:
+                            break
+                    except:
+                        continue
+                
+                # Check if we found new comments or content
+                if clicked_any or height_increased:
+                    no_new_comments_count = 0
+                    consecutive_empty_scrolls = 0
+                    scroll_count += 1
+                    print(f"📊 Scroll {scroll_count}: Found new content (height: {previous_height} -> {current_height})")
+                else:
+                    no_new_comments_count += 1
+                    consecutive_empty_scrolls += 1
+                    print(f"📊 Scroll {i+1}: No new content ({no_new_comments_count}/{max_no_new_comments}, empty: {consecutive_empty_scrolls}/{max_consecutive_empty})")
+                
+                # Stop conditions
+                if no_new_comments_count >= max_no_new_comments:
+                    print(f"🏁 Stopping scroll: No new comments for {max_no_new_comments} attempts")
+                    break
+                
+                if consecutive_empty_scrolls >= max_consecutive_empty:
+                    print(f"🏁 Stopping scroll: {max_consecutive_empty} consecutive empty scrolls")
+                    break
+                
+                # Progress update with more frequent reporting
+                if i % 10 == 0:  # Progress updates every 10 scrolls for 275 scrolls
+                    print(f"🔄 Scrolling progress: {i+1}/{max_scroll_attempts} (Target: 3k comments)")
+                    
+                    # Save progress periodically (every 25 scrolls for 275 scrolls)
+                    if i % 25 == 0:
+                        self._save_scroll_progress(i, self.current_comments_data)
+                    
+                    # Update progress callback if available
+                    if self.progress_callback:
+                        self.progress_callback(i+1, f"Đang scroll để lấy comments... ({i+1}/{max_scroll_attempts})")
+                
+                # Adaptive wait time based on scroll count for 275 scrolls - OPTIMIZED FOR 3K COMMENTS
+                if i > 50:  # After 50 scrolls, slight increase
+                    time.sleep(0.8)
+                elif i > 100:  # After 100 scrolls, increase wait time
+                    time.sleep(1.0)
+                elif i > 150:  # After 150 scrolls, increase wait time more
+                    time.sleep(1.2)
+                elif i > 200:  # After 200 scrolls, even more wait time
+                    time.sleep(1.5)
+                elif i > 250:  # After 250 scrolls, maximum wait time
+                    time.sleep(2.0)
+        
         except Exception as e:
-            print(f"⚠️ Error clearing cache: {e}")
+            print(f"⚠️ Ultra fast loading error: {e}")
 
     def _switch_to_all_comments(self):
-        """Switch to 'All comments' view to get more comments"""
+        """Switch to 'All comments' view to get more comments - from focused code"""
         print("🔄 Attempting to switch to 'All comments' view...")
         
         try:
@@ -267,504 +778,100 @@ class FacebookGroupsScraper:
             print(f"  ⚠️ Error switching to 'All comments' view: {e}")
             print("  Proceeding with current view...")
 
-    def _click_view_more(self):
-        """Click on 'View more comments' button to load more comments"""
-        print("🔄 Attempting to click 'View more comments' button...")
+    def extract_comments_ultra_fast(self):
+        """Ultra fast comment extraction"""
+        print(f"⚡ ULTRA FAST EXTRACTION STARTING")
         
-        try:
-            time.sleep(3)
-            
-            # Enhanced selectors for view more button
-            view_more_selectors = [
-                "//div[contains(text(),'View more comments')]",
-                "//button[contains(text(),'View more comments')]",
-                "//a[contains(text(),'View more comments')]",
-                "//span[contains(text(),'View more comments')]"
-            ]
-
-            clicked = False
-            for selector in view_more_selectors:
-                try:
-                    elements = self.driver.find_elements(By.XPATH, selector)
-                    for element in elements:
-                        if element.is_displayed() and element.is_enabled():
-                            print(f"  Found 'View more comments' button: {element.text}")
-                            
-                            # Scroll into view
-                            self.driver.execute_script("arguments[0].scrollIntoView({behavior: 'smooth', block: 'center'});", element)
-                            time.sleep(1)
-                            
-                            # Try to click
-                            try:
-                                element.click()
-                                clicked = True
-                                print("  ✅ Successfully clicked 'View more comments' button")
-                                time.sleep(4)  # Wait for comments to load
-                                break
-                            except:
-                                # Try JavaScript click
-                                try:
-                                    self.driver.execute_script("arguments[0].click();", element)
-                                    clicked = True
-                                    print("  ✅ Successfully clicked 'View more comments' button (JS)")
-                                    
-                                    time.sleep(4)
-                                    break
-                                except:
-                                    continue
-                    
-                    if clicked:
-                        break
-                        
-                except Exception as e:
-                    continue
-            
-            if not clicked:
-                print("  ⚠️ Could not find or click 'View more comments' button, proceeding with current view")
-            else:
-                print("  🎯 Switched to 'View more comments' view successfully")
-                
-        except Exception as e:
-            print(f"  ⚠️ Error switching to 'View more comments' view: {e}")
-            print("  Proceeding with current view...")
-
-    def is_comment_div(self, div_element):
-        """Check if a div element contains comment-like content"""
-        try:
-            # Get text content
-            text = div_element.text.strip()
-            if len(text) < 10:  # Too short to be a meaningful comment
-                return False
-            
-            # Check for profile links (common in comments)
-            profile_links = div_element.find_elements(By.XPATH, ".//a[contains(@href, 'profile') or contains(@href, 'user') or contains(@href, 'facebook.com/')]")
-            if profile_links:
-                return True
-            
-            # Check for comment-specific attributes
-            aria_label = div_element.get_attribute('aria-label') or ''
-            if 'comment' in aria_label.lower() or 'bình luận' in aria_label.lower():
-                return True
-            
-            # Check for comment-specific classes
-            class_attr = div_element.get_attribute('class') or ''
-            if any(keyword in class_attr.lower() for keyword in ['comment', 'reply', 'response']):
-                return True
-            
-            # Check for comment-specific data attributes
-            data_ft = div_element.get_attribute('data-ft') or ''
-            if 'comment' in data_ft.lower():
-                return True
-            
-            # Check for role attribute
-            role = div_element.get_attribute('role') or ''
-            if role == 'article':
-                return True
-            
-            # Check for comment ID patterns
-            element_id = div_element.get_attribute('id') or ''
-            if 'comment' in element_id.lower():
-                return True
-            
-            # Check for time elements (comments often have timestamps)
-            time_elements = div_element.find_elements(By.XPATH, ".//time | .//span[contains(@class, 'time')] | .//a[contains(@class, 'time')]")
-            if time_elements:
-                return True
-            
-            # Check for like/reply buttons (common in comments)
-            action_buttons = div_element.find_elements(By.XPATH, ".//*[contains(text(), 'Like') or contains(text(), 'Reply') or contains(text(), 'Thích') or contains(text(), 'Trả lời')]")
-            if action_buttons:
-                return True
-            
-            # Check for reasonable text length and structure
-            if len(text) > 20 and ('@' in text or '.' in text or '!' in text or '?' in text):
-                return True
-            
-            return False
-            
-        except Exception as e:
-            print(f"Error checking if div is comment: {e}")
-            return False
-
-    def extract_groups_comments(self):
-        """FOCUSED comment extraction targeting larger height container"""
-        print(f"=== EXTRACTING GROUPS COMMENTS (FOCUSED) ===")
-
-        # Find "All comments" button's parent with class html-div
-        try:
-            # Use the all_comments_button from _switch_to_all_comments if available
-            all_comments_button = getattr(self, 'all_comments_button', None)
-            
-            if not all_comments_button:
-                print("⚠️ No 'All comments' button found from previous method, searching again...")
-                # Look for "All comments" button with various possible text variations
-                all_comments_selectors = [
-                    "//button[contains(text(), 'All comments')]",
-                    "//a[contains(text(), 'All comments')]",
-                    "//span[contains(text(), 'All comments')]",
-                    "//div[contains(text(), 'All comments')]",
-                    "//*[contains(text(), 'View all comments')]",
-                    "//*[contains(text(), 'See all comments')]",
-                    "//*[contains(text(), 'Show all comments')]"
-                ]
-                
-                for selector in all_comments_selectors:
-                    try:
-                        elements = self.driver.find_elements(By.XPATH, selector)
-                        if elements:
-                            all_comments_button = elements[0]
-                            print(f"✅ Found 'All comments' button using selector: {selector}")
-                            break
-                    except Exception as e:
-                        continue
-            else:
-                print("✅ Using 'All comments' button from _switch_to_all_comments method")
-            
-            if all_comments_button:
-                # Find the parent with class html-div
-                parent_with_html_div = None
-                
-                # Method 1: Get the closest parent with class containing 'html-div'
-                try:
-                    closest_parent = all_comments_button.find_element(By.XPATH, "ancestor::*[contains(@class, 'html-div')][1]")
-                    if closest_parent:
-                        parent_with_html_div = closest_parent
-                        print("✅ Found closest parent with html-div class")
-                except:
-                    pass
-                
-                # Method 2: Look for immediate parent with class containing 'html-div' (fallback)
-                if not parent_with_html_div:
-                    try:
-                        parent = all_comments_button.find_element(By.XPATH, "./..")
-                        if 'html-div' in parent.get_attribute('class') or 'html-div' in parent.get_attribute('className'):
-                            parent_with_html_div = parent
-                            print("✅ Found parent with html-div class (immediate parent)")
-                    except:
-                        pass
-                
-                # Method 3: Look for any ancestor with class containing 'html-div' (fallback)
-                if not parent_with_html_div:
-                    try:
-                        ancestors = all_comments_button.find_elements(By.XPATH, "ancestor::*[contains(@class, 'html-div')]")
-                        if ancestors:
-                            parent_with_html_div = ancestors[0]
-                            print("✅ Found parent with html-div class (ancestor)")
-                    except:
-                        pass
-                
-                # Method 4: Look for any div with class containing 'html-div' that contains the button (fallback)
-                if not parent_with_html_div:
-                    try:
-                        # More efficient: search only in the document body
-                        html_div_containers = self.driver.find_elements(By.XPATH, "//*[contains(@class, 'html-div')]")
-                        for container in html_div_containers:
-                            try:
-                                # Check if the button is a descendant of this container
-                                if container.find_element(By.XPATH, f".//*[contains(@text, '{all_comments_button.text}') or contains(@aria-label, '{all_comments_button.text}')]"):
-                                    parent_with_html_div = container
-                                    print("✅ Found parent with html-div class (container fallback)")
-                                    break
-                            except:
-                                continue
-                    except:
-                        pass
-                
-                if parent_with_html_div:
-                    print(f"✅ Successfully found 'All comments' button's parent with html-div class")
-                    print(f"   Parent tag: {parent_with_html_div.tag_name}")
-                    print(f"   Parent class: {parent_with_html_div.get_attribute('class')}")
-                    
-                    # Get comment parent divs that come after the "All comments" parent_with_html_div
-                    print("🔍 Searching for comment parent divs after 'All comments' parent...")
-                    
-                    comment_parent_divs = []
-                    
-                    # Method 1: Find the next div that comes immediately after the parent_with_html_div
-                    try:
-                        # Get only the next div that is a sibling of the parent_with_html_div
-                        next_div = parent_with_html_div.find_element(By.XPATH, "./following-sibling::div[1]")
-                        print(f"Found next div after parent_with_html_div")
-                        print(f"Next div class: {next_div.get_attribute('class')}")
-                        
-                        # Find and click "View more comments" button until no more comments
-                        print("🔄 Starting 'View more comments' click loop...")
-                        previous_comment_count = 0
-                        no_new_comments_count = 0
-                        max_no_new_comments = 3  # Stop after 3 consecutive checks with no new comments
-                        
-                        while no_new_comments_count < max_no_new_comments:
-                            # Look for "View more comments" button
-                            view_more_selectors = [
-                                "//button[contains(text(), 'View more comments')]",
-                                "//a[contains(text(), 'View more comments')]",
-                                "//span[contains(text(), 'View more comments')]",
-                                "//div[contains(text(), 'View more comments')]",
-                                "//*[contains(text(), 'View more')]",
-                                "//*[contains(text(), 'Show more comments')]",
-                                "//*[contains(text(), 'Load more comments')]",
-                                "//*[contains(text(), 'See more comments')]",
-                                "//button[contains(@aria-label, 'View more comments')]",
-                                "//a[contains(@aria-label, 'View more comments')]"
-                            ]
-                            
-                            view_more_button = None
-                            for selector in view_more_selectors:
-                                try:
-                                    elements = self.driver.find_elements(By.XPATH, selector)
-                                    if elements:
-                                        view_more_button = elements[0]
-                                        print(f"✅ Found 'View more comments' button using selector: {selector}")
-                                        break
-                                except Exception as e:
-                                    continue
-                            
-                            if view_more_button:
-                                try:
-                                    # Click the "View more comments" button
-                                    self.driver.execute_script("arguments[0].click();", view_more_button)
-                                    print("🖱️ Clicked 'View more comments' button")
-                                except Exception as e:
-                                    print(f"⚠️ Error clicking 'View more comments' button: {e}")
-                                    # Try alternative click method
-                                    try:
-                                        view_more_button.click()
-                                        print("🖱️ Clicked 'View more comments' button (alternative method)")
-                                    except Exception as e2:
-                                        print(f"⚠️ Alternative click also failed: {e2}")
-                                        break
-                            else:
-                                print("⚠️ No 'View more comments' button found")
-                                no_new_comments_count += 1
-                                print(f"⚠️ No new comments button detected ({no_new_comments_count}/{max_no_new_comments})")
-                                break
-                            
-                            # Wait 5 seconds for new comments to load
-                            print("⏳ Waiting 5 seconds for new comments to load...")
-                            time.sleep(5)
-                            
-                            # Count current comments
-                            current_comment_divs = []
-                            next_div_children = next_div.find_elements(By.XPATH, "./div")
-                            for child in next_div_children:
-                                if self.is_comment_div(child):
-                                    print(f"✅ Found comment div: {child.text}")
-                                    current_comment_divs.append(child)
-                            
-                            current_comment_count = len(current_comment_divs)
-                            print(f"📊 Current comment count: {current_comment_count} (previous: {previous_comment_count})")
-                            
-                            # Check if new comments were loaded
-                            if current_comment_count > previous_comment_count:
-                                print(f"✅ New comments detected! (+{current_comment_count - previous_comment_count})")
-                                previous_comment_count = current_comment_count
-                                no_new_comments_count = 0  # Reset counter
-                            else:
-                                no_new_comments_count += 1
-                                print(f"⚠️ No new comments detected ({no_new_comments_count}/{max_no_new_comments})")
-                            
-                            # Check for stop flag
-                            if self._stop_flag:
-                                print("⏹️ Stop flag detected, breaking click loop")
-                                break
-                        
-                        print(f"🏁 Click loop completed. Final comment count: {current_comment_count}")
-                        
-                        # Use the final comment divs
-                        comment_parent_divs = current_comment_divs
-                        print(f"🎯 Final comment divs found: {len(comment_parent_divs)}")
-
-                        if len(comment_parent_divs) > 0:
-                            print(f"🎯 Found {len(comment_parent_divs)} comment divs in next_div children")
-                            # Extract comment data from the found divs
-                            comments_data = []
-                            seen_content = set()
-                            
-                            for i, element in enumerate(comment_parent_divs):
-                                if self._stop_flag:
-                                    break
-                                    
-                                try:
-                                    print(f"\n--- Processing comment div {i+1}/{len(comment_parent_divs)} ---")
-                                    
-                                    comment_data = self.extract_comment_data_focused(element, i)
-                                    
-                                    if not comment_data:
-                                        continue
-                                    
-                                    # FIXED: Deduplication - allow anonymous users with "Unknown" name
-                                    # Skip only if no name found AND not anonymous
-                                    if (comment_data['Name'] == "Unknown" and 
-                                        comment_data['UID'] != "Anonymous"):
-                                        print("  ✗ Skipped: no username found (not anonymous)")
-                                        continue
-                                        
-                                    # FIXED: Check for duplicates using UID + Name + PostLink for better uniqueness
-                                    if comment_data['UID'] == "Anonymous":
-                                        # For anonymous users, use PostLink for uniqueness
-                                        content_signature = f"Anonymous_{comment_data.get('PostLink', '')}"
-                                    else:
-                                        # For regular users, use Name + UID
-                                        content_signature = f"{comment_data['Name']}_{comment_data['UID']}"
-                                    
-                                    if content_signature in seen_content:
-                                        print("  ✗ Skipped: duplicate user")
-                                        continue
-                                    seen_content.add(content_signature)
-                                    
-                                    comment_data['Type'] = 'Comment'
-                                    comment_data['Layout'] = self.current_layout
-                                    comment_data['Source'] = 'All Comments Container'
-                                    
-                                    comments_data.append(comment_data)
-                                    print(f"  ✅ Added: {comment_data['Name']} - Profile: {comment_data['ProfileLink'][:50]}...")
-                                    
-                                except Exception as e:
-                                    print(f"  Error processing comment div {i}: {e}")
-                                    continue
-                            
-                            print(f"\n=== EXTRACTION COMPLETE: {len(comments_data)} comments ===")
-                            return comments_data
-                            
-                    except Exception as e:
-                        print(f"Error finding next div: {e}")
-                    
-                    print(f"🎯 Total comment parent divs found after 'All comments': {len(comment_parent_divs)}")
-                    # Extract comment data from the found divs
-                    comments_data = []
-                    seen_content = set()
-                    
-                    for i, element in enumerate(comment_parent_divs):
-                        if self._stop_flag:
-                            break
-                            
-                        try:
-                            print(f"\n--- Processing comment div {i+1}/{len(comment_parent_divs)} ---")
-                            
-                            comment_data = self.extract_comment_data_focused(element, i)
-                            
-                            if not comment_data:
-                                continue
-                            
-                            # FIXED: Deduplication - allow anonymous users with "Unknown" name
-                            # Skip only if no name found AND not anonymous
-                            if (comment_data['Name'] == "Unknown" and 
-                                comment_data['UID'] != "Anonymous"):
-                                print("  ✗ Skipped: no username found (not anonymous)")
-                                continue
-                                
-                            # FIXED: Check for duplicates using UID + Name + PostLink for better uniqueness
-                            if comment_data['UID'] == "Anonymous":
-                                # For anonymous users, use PostLink for uniqueness
-                                content_signature = f"Anonymous_{comment_data.get('PostLink', '')}"
-                            else:
-                                # For regular users, use Name + UID
-                                content_signature = f"{comment_data['Name']}_{comment_data['UID']}"
-                            
-                            if content_signature in seen_content:
-                                print("  ✗ Skipped: duplicate user")
-                                continue
-                            seen_content.add(content_signature)
-                            
-                            comment_data['Type'] = 'Comment'
-                            comment_data['Layout'] = self.current_layout
-                            comment_data['Source'] = 'All Comments Container'
-                            
-                            comments_data.append(comment_data)
-                            print(f"  ✅ Added: {comment_data['Name']} - Profile: {comment_data['ProfileLink'][:50]}...")
-                            
-                        except Exception as e:
-                            print(f"  Error processing comment div {i}: {e}")
-                            continue
-                    
-                    print(f"\n=== EXTRACTION COMPLETE: {len(comments_data)} comments ===")
-                    return comments_data
-                else:
-                    print("❌ Could not find parent with html-div class for 'All comments' button")
-                    
-            else:
-                print("❌ Could not find 'All comments' button")
-                
-        except Exception as e:
-            print(f"❌ Error while searching for 'All comments' button's parent: {e}")
-        
-        # Save page for debugging
-        try:
-            with open(f"debug_focused_{self.current_layout}.html", "w", encoding="utf-8") as f:
-                f.write(self.driver.page_source)
-            print(f"Saved page to debug_focused_{self.current_layout}.html")
-        except:
-            pass
-        
-        # FOCUSED: Search within the target container first
         all_comment_elements = []
         
-        print("🎯 Searching within target container...")
-        
-        # Strategy 1: Layout-specific selectors within target container
+        # Enhanced selectors based on layout (from working code)
         if self.current_layout == "www":
             selectors = [
-                ".//div[@role='article']",
-                ".//div[contains(@aria-label, 'Comment by')]",
-                ".//div[contains(@aria-label, 'Bình luận của')]",
-                ".//div[.//a[contains(@href, '/user/') or contains(@href, '/profile/')]]",
-                ".//div[.//h3//a[contains(@href, 'facebook.com')]]"
+                "//div[@role='article']",
+                "//div[contains(@aria-label, 'Comment by')]",
+                "//div[contains(@aria-label, 'Bình luận của')]",
+                "//div[.//a[contains(@href, '/user/') or contains(@href, '/profile/')]]",
+                "//div[.//h3//a[contains(@href, 'facebook.com')]]"
             ]
         elif self.current_layout == "mobile":
             selectors = [
-                ".//div[@data-sigil='comment']",
-                ".//div[contains(@data-ft, 'comment')]",
-                ".//div[contains(@id, 'comment_')]",
-                ".//div[.//a[contains(@href, 'profile.php') or contains(@href, 'user.php')]]"
+                "//div[@data-sigil='comment']",
+                "//div[contains(@data-ft, 'comment')]",
+                "//div[contains(@id, 'comment_')]",
+                "//div[.//a[contains(@href, 'profile.php') or contains(@href, 'user.php')]]"
             ]
         else:  # mbasic
             selectors = [
-                ".//div[@data-ft and contains(@data-ft, 'comment')]",
-                ".//div[contains(@id, 'comment_')]",
-                ".//table//div[.//a[contains(@href, 'profile.php')]]",
-                ".//div[.//a[contains(@href, 'profile.php?id=')]]"
+                "//div[@data-ft and contains(@data-ft, 'comment')]",
+                "//div[contains(@id, 'comment_')]",
+                "//table//div[.//a[contains(@href, 'profile.php')]]",
+                "//div[.//a[contains(@href, 'profile.php?id=')]]"
             ]
         
-        # Apply selectors within target container
+        # Apply selectors (from working code)
         for i, selector in enumerate(selectors):
             try:
-                elements = target_container.find_elements(By.XPATH, selector)
-                print(f"Target container - Selector {i+1}: Found {len(elements)} elements")
+                # Add timeout handling for element finding with retry mechanism
+                elements = []
+                retry_count = 0
+                max_retries = 2
+                
+                while retry_count < max_retries:
+                    try:
+                        elements = self.driver.find_elements(By.XPATH, selector)
+                        break  # Success, exit retry loop
+                    except Exception as retry_e:
+                        retry_count += 1
+                        print(f"⚠️ Selector {i+1} retry {retry_count}/{max_retries}: {retry_e}")
+                        
+                        # Check if it's a timeout error
+                        if "HTTPConnectionPool" in str(retry_e) or "timeout" in str(retry_e).lower():
+                            self.timeout_count += 1
+                            print(f"⚠️ Timeout count: {self.timeout_count}/{self.max_timeouts}")
+                            
+                            # Restart browser if too many timeouts
+                            if self.timeout_count >= self.max_timeouts:
+                                # Extract current comments before restart to preserve data
+                                print("🚨 CRITICAL: Extracting comments before browser restart to preserve data...")
+                                try:
+                                    current_extracted_comments = self.extract_comments_ultra_fast()
+                                    print(f"💾 Extracted {len(current_extracted_comments)} comments before restart")
+                                except Exception as extract_e:
+                                    print(f"⚠️ Could not extract comments before restart: {extract_e}")
+                                    current_extracted_comments = self.current_comments_data if hasattr(self, 'current_comments_data') else []
+                                
+                                # Save current extraction progress with actual data
+                                self._save_scroll_progress(0, current_extracted_comments)
+                                
+                                if self._restart_browser_on_timeout():
+                                    print("🔄 Browser restarted, continuing extraction...")
+                                    # Restore progress if possible
+                                    if self._restore_scroll_progress():
+                                        print("✅ Extraction progress preserved")
+                                    time.sleep(3)
+                                else:
+                                    print("❌ Browser restart failed")
+                                    break
+                        
+                        if retry_count < max_retries:
+                            time.sleep(2)  # Wait before retry
+                        continue
+                
+                print(f"📊 Selector {i+1}: Found {len(elements)} elements")
                 
                 for elem in elements:
                     if elem not in all_comment_elements:
                         all_comment_elements.append(elem)
                         
             except Exception as e:
-                print(f"Target container - Selector {i+1} failed: {e}")
+                print(f"📊 Selector {i+1} failed: {e}")
                 continue
         
-        # Strategy 2: If not enough elements, expand search
-        if len(all_comment_elements) < 10:
-            print("⚠️ Not enough elements in target container, expanding search...")
-            
-            # Search in the entire page as fallback
-            for i, selector in enumerate(selectors):
-                try:
-                    # Remove leading "./" to search entire document
-                    global_selector = selector.replace(".//", "//")
-                    elements = self.driver.find_elements(By.XPATH, global_selector)
-                    print(f"Global search - Selector {i+1}: Found {len(elements)} elements")
-                    
-                    for elem in elements:
-                        if elem not in all_comment_elements:
-                            all_comment_elements.append(elem)
-                            
-                except Exception as e:
-                    print(f"Global search - Selector {i+1} failed: {e}")
-                    continue
-        
-        # Strategy 3: Fallback selectors
+        # Fallback selectors (from working code)
         if len(all_comment_elements) == 0:
             print("⚠️ No comments with standard selectors, trying fallback...")
             
             fallback_selectors = [
-                # Look for any div with profile links
                 "//div[.//a[contains(@href, 'facebook.com/')] and string-length(normalize-space(text())) > 20]",
                 "//div[string-length(normalize-space(text())) > 30]",
                 "//div[@role='article' and string-length(normalize-space(text())) > 20]",
@@ -774,77 +881,224 @@ class FacebookGroupsScraper:
             for selector in fallback_selectors:
                 try:
                     elements = self.driver.find_elements(By.XPATH, selector)
-                    print(f"Fallback selector: Found {len(elements)} elements")
+                    print(f"📊 Fallback selector: Found {len(elements)} elements")
                     for elem in elements:
                         if elem not in all_comment_elements:
                             all_comment_elements.append(elem)
                     
-                    # Stop if we found enough elements
                     if len(all_comment_elements) > 20:
                         break
                 except:
                     continue
         
-        # Sort by position
+        # Remove duplicates quickly
+        all_comment_elements = list(set(all_comment_elements))
+        
+        # Sort by position (from working code)
         try:
             all_comment_elements.sort(key=lambda x: (x.location['y'], x.location['x']))
         except:
             pass
         
+        # Set total for progress tracking
+        self.total_estimated = len(all_comment_elements)
+        print(f"📊 Found {self.total_estimated} potential comments")
+        
+        # Ultra fast processing with debug
         comments = []
         seen_content = set()
+        rejected_count = 0
         
-        print(f"Processing {len(all_comment_elements)} potential comment elements...")
+        print(f"🔍 Processing {len(all_comment_elements)} elements...")
         
-        # Process each element
         for i, element in enumerate(all_comment_elements):
             if self._stop_flag:
                 break
                 
-            try:
-                print(f"\n--- Element {i+1}/{len(all_comment_elements)} ---")
+            # Check limit
+            if self.comment_limit > 0 and len(comments) >= self.comment_limit:
+                break
                 
-                comment_data = self.extract_comment_data_focused(element, i)
+            try:
+                # Debug first 10 elements
+                if i < 10:
+                    element_text = element.text.strip()[:100] if element.text else "No text"
+                    print(f"🔍 Element {i}: '{element_text}...'")
+                
+                comment_data = self._extract_comment_ultra_fast(element, i)
                 
                 if not comment_data:
-                    continue
+                    # Only reject if element has no text at all (very short)
+                    element_text = element.text.strip() if element.text else ""
+                    if len(element_text) < 5:  # Use same threshold as focused code
+                        rejected_count += 1
+                        if i < 10:
+                            print(f"  ❌ Rejected element {i}: Too short '{element_text}...'")
+                        continue
+                    else:
+                        # Create comment data with extracted name even if main extraction failed
+                        # Try to extract name from element even if main extraction failed
+                        extracted_name = "Unknown"
+                        try:
+                            # Try to find first link that might be a name
+                            links = element.find_elements(By.XPATH, ".//a")
+                            for link in links[:3]:  # Check first 3 links
+                                link_text = link.text.strip()
+                                link_href = link.get_attribute("href") or ""
+                                
+                                # Check if this looks like a profile link
+                                if ('facebook.com' in link_href and 
+                                    ('profile.php' in link_href or '/user/' in link_href or 'user.php' in link_href or
+                                     re.search(r'facebook\.com/[^/?&]+/?$', link_href))):
+                                    
+                                    # Check if link text looks like a name
+                                    if (link_text and len(link_text) >= 2 and len(link_text) <= 100 and
+                                        not link_text.isdigit() and not link_text.startswith('http') and
+                                        not any(ui in link_text.lower() for ui in [
+                                            'like', 'reply', 'share', 'comment', 'thích', 'trả lời', 
+                                            'chia sẻ', 'bình luận', 'ago', 'trước', 'min', 'hour', 
+                                            'day', 'phút', 'giờ', 'ngày', 'view', 'xem', 'show'
+                                        ])):
+                                        extracted_name = link_text
+                                        break
+                            
+                            # Fallback: try to get first line of text as name
+                            if extracted_name == "Unknown":
+                                lines = element_text.splitlines()
+                                if lines:
+                                    first_line = lines[0].strip()
+                                    if (first_line and 2 <= len(first_line) <= 100 and 
+                                        not first_line.startswith("http") and
+                                        not any(keyword in first_line.lower() for keyword in ['anonymous', 'ẩn danh'])):
+                                        extracted_name = first_line
+                        except:
+                            pass
+                        
+                        # Tìm comment link cho fallback data
+                        fallback_comment_link = ""
+                        try:
+                            # Tìm tất cả link trong element để lấy comment link
+                            fallback_links = element.find_elements(By.XPATH, ".//a")
+                            print(f"    Fallback: Found {len(fallback_links)} links in element")
+                            
+                            for fallback_link in fallback_links:
+                                try:
+                                    fallback_link_text = fallback_link.text.strip()
+                                    fallback_link_href = fallback_link.get_attribute("href") or ""
+                                    
+                                    # Tìm link có comment_id
+                                    if ('facebook.com' in fallback_link_href and 
+                                        'comment_id=' in fallback_link_href and 
+                                        '/groups/' in fallback_link_href and 
+                                        '/posts/' in fallback_link_href):
+                                        
+                                        # Kiểm tra text của link có phải là thời gian không
+                                        time_patterns = [
+                                            r'\d+\s*(phút|giờ|ngày|tuần|tháng|năm|trước)',  # Vietnamese time
+                                            r'\d+\s*(min|hour|day|week|month|year|ago)',     # English time
+                                            r'\d+[hmsdwy]',                                 # Short format: 1h, 2d, 3m, etc.
+                                            r'(vừa xong|just now|bây giờ|now)'              # "Just now" patterns
+                                        ]
+                                        
+                                        is_time_link = any(re.search(pattern, fallback_link_text.lower()) for pattern in time_patterns)
+                                        
+                                        # Nếu text ngắn cũng coi là time link
+                                        if not is_time_link and fallback_link_text and len(fallback_link_text) <= 20:
+                                            time_indicators = ['ago', 'trước', 'giờ', 'ngày', 'phút', 'h', 'm', 'd', 'w', 'y']
+                                            is_time_link = any(indicator in fallback_link_text.lower() for indicator in time_indicators)
+                                        
+                                        # LẤY LINK CHO FALLBACK DATA
+                                        if is_time_link:
+                                            fallback_comment_link = fallback_link_href.replace('&amp;', '&')
+                                            print(f"      🔗 Fallback: Found TIME comment link: '{fallback_link_text}' -> {fallback_comment_link[:80]}...")
+                                            break
+                                        elif not fallback_comment_link:  # Nếu chưa có link nào, lấy link này
+                                            fallback_comment_link = fallback_link_href.replace('&amp;', '&')
+                                            print(f"      🔗 Fallback: Found ANY comment link: '{fallback_link_text}' -> {fallback_comment_link[:80]}...")
+                                            
+                                except Exception as e:
+                                    print(f"      Error processing fallback link: {e}")
+                                    continue
+                                    
+                        except Exception as e:
+                            print(f"    Error finding fallback comment link: {e}")
+                        
+                        # Create comment data with extracted name and comment link
+                        comment_data = {
+                            "UID": "Unknown",
+                            "Name": extracted_name,
+                            "ProfileLink": "",
+                            "CommentLink": fallback_comment_link,  # Thêm comment link cho fallback
+                            "ElementIndex": i,
+                            "TextPreview": element_text[:100] + "..." if len(element_text) > 100 else element_text,
+                            "ContainerHeight": "Ultra Fast - Name Extracted + Time Click Links"
+                        }
                 
-                # FIXED: Deduplication - allow anonymous users with "Unknown" name
-                # Skip only if no name found AND not anonymous
-                if (comment_data['Name'] == "Unknown" and 
-                    comment_data['UID'] != "Anonymous"):
-                    print("  ✗ Skipped: no username found (not anonymous)")
-                    continue
-                    
-                # FIXED: Check for duplicates using UID + Name + PostLink for better uniqueness
-                if comment_data['UID'] == "Anonymous":
-                    # For anonymous users, use PostLink for uniqueness
-                    content_signature = f"Anonymous_{comment_data.get('PostLink', '')}"
-                else:
-                    # For regular users, use Name + UID
-                    content_signature = f"{comment_data['Name']}_{comment_data['UID']}"
+                # MINIMAL DEDUPLICATION - Only skip exact duplicates
+                # Use text content for deduplication instead of user info
+                text_signature = comment_data['TextPreview'][:50]  # First 50 chars of text
                 
-                if content_signature in seen_content:
-                    print("  ✗ Skipped: duplicate user")
+                if text_signature in seen_content:
+                    if i < 10:
+                        print(f"  🔄 Duplicate text element {i}: '{text_signature}...'")
                     continue
-                seen_content.add(content_signature)
+                seen_content.add(text_signature)
                 
                 comment_data['Type'] = 'Comment'
                 comment_data['Layout'] = self.current_layout
-                comment_data['Source'] = 'Target Container (FOCUSED)'
+                comment_data['Source'] = 'Ultra Fast'
                 
                 comments.append(comment_data)
-                print(f"  ✅ Added: {comment_data['Name']} - Profile: {comment_data['ProfileLink'][:50]}...")
+                self.extracted_count = len(comments)
+                self.current_comments_data = comments  # Store for save on stop
+                
+                # Enhanced progress saving every 50 comments during extraction
+                if len(comments) % 50 == 0:
+                    print(f"💾 Auto-saving progress: {len(comments)} comments extracted")
+                    # This ensures current_comments_data is always up to date
+                
+                if i < 10:  # Debug first 10 successful extractions
+                    name_status = "✅" if comment_data['Name'] != "Unknown" else "⚠️"
+                    print(f"  {name_status} Extracted element {i}: {comment_data['Name']} - '{comment_data['TextPreview'][:50]}...'")
+                
+                # Enhanced progress update for 8k comments - MORE FREQUENT UPDATES
+                if self.progress_callback:
+                    if len(comments) % 10 == 0 or len(comments) <= 50:  # Update every 10 comments or first 50
+                        progress_text = f"Đã lấy {self.extracted_count} comments"
+                        if self.comment_limit > 0:
+                            progress_text += f" / {self.comment_limit}"
+                        else:
+                            progress_text += f" / {self.total_estimated} (Target: 3k)"
+                        self.progress_callback(self.extracted_count, progress_text)
                 
             except Exception as e:
-                print(f"  Error processing element {i}: {e}")
+                rejected_count += 1
+                if i < 10:
+                    print(f"  ⚠️ Exception element {i}: {e}")
                 continue
         
-        print(f"\n=== FOCUSED EXTRACTION COMPLETE: {len(comments)} comments ===")
+        # Calculate name extraction statistics
+        named_comments = len([c for c in comments if c['Name'] != "Unknown"])
+        name_success_rate = (named_comments / len(comments) * 100) if comments else 0
+        
+        print(f"📊 Processing complete: {len(comments)} extracted, {rejected_count} rejected (only empty elements)")
+        print(f"🎯 ACCEPT ALL + NAME EXTRACTION: Extracted {len(comments)}/{len(all_comment_elements)} elements ({len(comments)/len(all_comment_elements)*100:.1f}% success rate)")
+        print(f"👤 Name extraction: {named_comments}/{len(comments)} comments with names ({name_success_rate:.1f}% name success rate)")
+        
+        # Final progress update
+        if self.progress_callback:
+            final_progress_text = f"Đã lấy {len(comments)} comments"
+            if self.comment_limit > 0:
+                final_progress_text += f" / {self.comment_limit}"
+            else:
+                final_progress_text += f" / {self.total_estimated}"
+            self.progress_callback(len(comments), final_progress_text)
+        
+        print(f"⚡ ULTRA FAST EXTRACTION COMPLETE: {len(comments)} comments")
         return comments
 
-    def extract_comment_data_focused(self, element, index):
-        """FOCUSED comment data extraction with PostLink from time clicks"""
+    def _extract_comment_ultra_fast(self, element, index):
+        """Ultra fast comment data extraction with time click links"""
         try:
             full_text = element.text.strip()
             if len(full_text) < 5:
@@ -856,9 +1110,9 @@ class FacebookGroupsScraper:
             username = "Unknown"
             profile_href = ""
             uid = "Unknown"
-            comment_link = ""  # FIXED: Added PostLink extraction
+            comment_link = ""  # Link khi click vào thời gian comment
             
-            # FIXED: Check for anonymous users first - keep them as "Unknown"
+            # Kiểm tra người dùng ẩn danh
             is_anonymous = any(keyword in full_text.lower() for keyword in [
                 'ẩn danh', 
                 'người tham gia ẩn danh', 
@@ -868,19 +1122,16 @@ class FacebookGroupsScraper:
             ])
             
             if is_anonymous:
-                print(f"      🔍 FIXED: Detected anonymous user, setting name to 'Unknown'")
-                username = "Unknown"  # FIXED: Always use "Unknown" for anonymous
-                uid = "Anonymous"  # Special UID for anonymous users
-                # Still try to extract PostLink from time clicks for anonymous users
+                print(f"      🔍 Detected anonymous user, setting name to 'Unknown'")
+                username = "Unknown"
+                uid = "Anonymous"
             
-            # FOCUSED: Enhanced username and PostLink extraction
-            print(f"    🎯 FOCUSED analysis of element structure...")
-            
-            # Method 1: Get ALL links and analyze each one (including for anonymous users)
+            # Tìm tất cả các link trong comment để lấy link thời gian - CHO TẤT CẢ NGƯỜI DÙNG
             try:
                 all_links = element.find_elements(By.XPATH, ".//a")
-                print(f"    Found {len(all_links)} total links in element")
+                print(f"    Found {len(all_links)} links in comment")
                 
+                # BƯỚC 1: Tìm comment link TRƯỚC (cho tất cả người dùng) - TÌM KIẾM MẠNH MẼ
                 for link_index, link in enumerate(all_links):
                     try:
                         link_text = link.text.strip()
@@ -888,144 +1139,169 @@ class FacebookGroupsScraper:
                         
                         print(f"      Link {link_index+1}: Text='{link_text}' | Href={link_href[:60]}...")
                         
-                        # FIXED: Check for time-based PostLink FIRST (higher priority) - works for all users
-                        if ('facebook.com' in link_href and 'comment_id=' in link_href and 
-                            '/groups/' in link_href and '/posts/' in link_href):
+                        # TÌM KIẾM MẠNH MẼ: BẤT KỲ link nào có comment_id và thuộc Facebook Groups
+                        if ('facebook.com' in link_href and 
+                            'comment_id=' in link_href and 
+                            '/groups/' in link_href and 
+                            '/posts/' in link_href):
                             
-                            # Check if this looks like a time link
+                            # Kiểm tra text của link có phải là thời gian không
                             time_patterns = [
-                                r'\d+\s*(ngày|giờ|phút|giây|tuần|tháng|năm)',  # Vietnamese time
-                                r'\d+\s*(day|hour|min|sec|week|month|year)s?',  # English time
-                                r'\d+\s*[hdmwy]$',  # Short format: 1h, 2d, 3m, etc.
-                                r'(just now|vừa xong|bây giờ|now)',  # "Just now" patterns
+                                r'\d+\s*(phút|giờ|ngày|tuần|tháng|năm|trước)',  # Vietnamese time
+                                r'\d+\s*(min|hour|day|week|month|year|ago)',     # English time
+                                r'\d+[hmsdwy]',                                 # Short format: 1h, 2d, 3m, etc.
+                                r'(vừa xong|just now|bây giờ|now)'              # "Just now" patterns
                             ]
                             
-                            is_time_text = any(re.search(pattern, link_text.lower()) for pattern in time_patterns)
+                            is_time_link = any(re.search(pattern, link_text.lower()) for pattern in time_patterns)
                             
-                            # Also check for short time text (like "21 giờ")
-                            if not is_time_text and link_text and len(link_text) <= 20:
-                                # Additional time indicators
+                            # Nếu text ngắn cũng coi là time link
+                            if not is_time_link and link_text and len(link_text) <= 20:
                                 time_indicators = ['ago', 'trước', 'giờ', 'ngày', 'phút', 'h', 'm', 'd', 'w', 'y']
-                                is_time_text = any(indicator in link_text.lower() for indicator in time_indicators)
+                                is_time_link = any(indicator in link_text.lower() for indicator in time_indicators)
                             
-                            if is_time_text:
+                            # LẤY LINK CHO TẤT CẢ NGƯỜI DÙNG - ƯU TIÊN TIME LINK NHƯNG LẤY BẤT KỲ LINK NÀO
+                            if is_time_link:
                                 # Clean the URL
                                 comment_link = link_href.replace('&amp;', '&')
-                                print(f"      🔗 FIXED: Found PostLink from time: '{link_text}' -> {comment_link[:80]}...")
-                        
-                        # FIXED: Check for profile link - only for non-anonymous users
-                        elif (not is_anonymous and link_href and 
-                              (('facebook.com' in link_href and 
-                                ('profile.php' in link_href or '/user/' in link_href or 'user.php' in link_href or
-                                 re.search(r'facebook\.com/[^/?&]+/?$', link_href))) or
-                                # FIXED: Also check for relative URLs like /groups/.../user/{UID}/
-                                (link_href.startswith('/groups/') and '/user/' in link_href) or
-                                # FIXED: Check for any href with /user/ pattern
-                                ('/user/' in link_href and link_href != ''))):
-                            
-                            print(f"        🔍 FIXED: Analyzing potential profile link...")
-                            print(f"        🔍 Link text: '{link_text}'")
-                            print(f"        🔍 Link href: '{link_href}'")
-                            
-                            # FIXED: Enhanced name validation first
-                            is_valid_name = (link_text and 
-                                len(link_text) >= 2 and 
-                                len(link_text) <= 100 and
-                                not link_text.isdigit() and
-                                not link_text.startswith('http') and
-                                not any(ui in link_text.lower() for ui in [
-                                    'like', 'reply', 'share', 'comment', 'thích', 'trả lời', 
-                                    'chia sẻ', 'bình luận', 'ago', 'trước', 'min', 'hour', 
-                                    'day', 'phút', 'giờ', 'ngày', 'ẩn danh', 'anonymous',
-                                    'view', 'xem', 'show', 'hiển thị', 'see more', 'view more'
-                                ]))
-                            
-                            if is_valid_name:
-                                print(f"        ✅ FIXED: Valid name found: '{link_text}'")
-                                
-                                # FIXED: Enhanced UID extraction with Groups user pattern FIRST
-                                extracted_uid = "Unknown"
-                                uid_patterns = [
-                                    # FIXED: Groups user pattern (highest priority) - matches your exact example
-                                    r'/groups/\d+/user/(\d+)/',           # /groups/123/user/456/
-                                    r'/groups/\d+/user/(\d+)\?',          # /groups/123/user/456?params
-                                    r'/groups/\d+/user/(\d+)$',           # /groups/123/user/456
-                                    r'/groups/[^/]+/user/(\d+)/',         # /groups/name/user/456/
-                                    r'/groups/[^/]+/user/(\d+)\?',        # /groups/name/user/456?params
-                                    r'/groups/[^/]+/user/(\d+)$',         # /groups/name/user/456
-                                    # General user patterns
-                                    r'/user/(\d+)/',                      # /user/456/
-                                    r'/user/(\d+)\?',                     # /user/456?params
-                                    r'/user/(\d+)$',                      # /user/456
-                                    # Standard patterns
-                                    r'profile\.php\?id=(\d+)',
-                                    r'user\.php\?id=(\d+)',
-                                    r'[?&]id=(\d+)',
-                                    r'facebook\.com/([^/?&]+)/?$',        # Username pattern
-                                    r'(\d{10,})'                          # Facebook UIDs are usually 10+ digits
-                                ]
-                                
-                                print(f"        🔍 FIXED: Testing {len(uid_patterns)} UID patterns against: {link_href}")
-                                
-                                for pattern_idx, pattern in enumerate(uid_patterns, 1):
-                                    try:
-                                        print(f"        🔍 Testing pattern {pattern_idx}: {pattern}")
-                                        uid_match = re.search(pattern, link_href)
-                                        if uid_match:
-                                            potential_uid = uid_match.group(1)
-                                            print(f"        🎯 FIXED: Pattern {pattern_idx} ({pattern}) MATCHED: {potential_uid}")
-                                            
-                                            # Check if it's a numeric UID or username
-                                            if potential_uid.isdigit() and len(potential_uid) >= 8:
-                                                extracted_uid = potential_uid
-                                                print(f"        ✅ FIXED: Successfully extracted UID from pattern {pattern_idx}: {extracted_uid}")
-                                                break
-                                            elif not potential_uid.isdigit() and len(potential_uid) >= 3:
-                                                extracted_uid = f"username:{potential_uid}"
-                                                print(f"        ✅ FIXED: Successfully extracted username from pattern {pattern_idx}: {potential_uid}")
-                                                break
-                                            else:
-                                                print(f"        ❌ FIXED: Pattern matched but invalid UID: {potential_uid}")
-                                        else:
-                                            print(f"        ❌ Pattern {pattern_idx} no match")
-                                                
-                                    except Exception as e:
-                                        print(f"        ⚠️ Pattern {pattern_idx} failed: {e}")
-                                        continue
-                                
-                                print(f"        🎯 FIXED: Final extracted_uid after all patterns: {extracted_uid}")
-                                
-                                # Update user info if UID was extracted (only for non-anonymous)
-                                if extracted_uid != "Unknown" and not is_anonymous:
-                                    username = link_text  # Only update username for non-anonymous
-                                    uid = extracted_uid  # Use the extracted UID
-                                    
-                                    # FIXED: Convert relative URL to full URL for consistency
-                                    if link_href.startswith('/'):
-                                        profile_href = f"https://www.facebook.com{link_href}"
-                                    else:
-                                        profile_href = link_href
-                                    
-                                    print(f"      ✅ FIXED: Successfully updated profile: {username} -> UID: {uid}")
-                                    print(f"      🔗 FIXED: Profile URL: {profile_href}")
-                                    
-                                    # Break after finding the first valid profile with UID
-                                    break
-                                elif is_anonymous:
-                                    print(f"        🔍 FIXED: Anonymous user - not updating profile info, keeping name as 'Unknown'")
-                                else:
-                                    print(f"        ⚠️ FIXED: Valid name '{link_text}' but no UID extracted from: {link_href}")
-                            else:
-                                print(f"        ❌ FIXED: Invalid name: '{link_text}'")
+                                print(f"      🔗 Found TIME comment link for ALL users: '{link_text}' -> {comment_link[:80]}...")
+                                break  # Ưu tiên time link, break ngay
+                            elif not comment_link:  # Nếu chưa có link nào, lấy link này
+                                # Clean the URL
+                                comment_link = link_href.replace('&amp;', '&')
+                                print(f"      🔗 Found ANY comment link for ALL users: '{link_text}' -> {comment_link[:80]}...")
+                                # KHÔNG break để có thể tìm time link tốt hơn
                                 
                     except Exception as e:
                         print(f"      Error processing link {link_index+1}: {e}")
                         continue
                 
+                # BƯỚC 2: Tìm profile link (chỉ cho người dùng không ẩn danh)
+                if not is_anonymous:
+                    for link_index, link in enumerate(all_links):
+                        try:
+                            link_text = link.text.strip()
+                            link_href = link.get_attribute("href") or ""
+                            
+                            # Kiểm tra profile link
+                            if (link_href and 
+                                  (('facebook.com' in link_href and 
+                                    ('profile.php' in link_href or '/user/' in link_href or 'user.php' in link_href or
+                                     re.search(r'facebook\.com/[^/?&]+/?$', link_href))) or
+                                    (link_href.startswith('/groups/') and '/user/' in link_href) or
+                                    ('/user/' in link_href and link_href != ''))):
+                                
+                                # Kiểm tra tên hợp lệ
+                                is_valid_name = (link_text and 
+                                    len(link_text) >= 2 and 
+                                    len(link_text) <= 100 and
+                                    not link_text.isdigit() and
+                                    not link_text.startswith('http') and
+                                    not any(ui in link_text.lower() for ui in [
+                                        'like', 'reply', 'share', 'comment', 'thích', 'trả lời', 
+                                        'chia sẻ', 'bình luận', 'ago', 'trước', 'min', 'hour', 
+                                        'day', 'phút', 'giờ', 'ngày', 'ẩn danh', 'anonymous',
+                                        'view', 'xem', 'show', 'hiển thị', 'see more', 'view more'
+                                    ]))
+                                
+                                if is_valid_name:
+                                    # Trích xuất UID từ link
+                                    extracted_uid = "Unknown"
+                                    uid_patterns = [
+                                        r'/groups/\d+/user/(\d+)/',
+                                        r'/groups/\d+/user/(\d+)\?',
+                                        r'/groups/\d+/user/(\d+)$',
+                                        r'/groups/[^/]+/user/(\d+)/',
+                                        r'/groups/[^/]+/user/(\d+)\?',
+                                        r'/groups/[^/]+/user/(\d+)$',
+                                        r'/user/(\d+)/',
+                                        r'/user/(\d+)\?',
+                                        r'/user/(\d+)$',
+                                        r'profile\.php\?id=(\d+)',
+                                        r'user\.php\?id=(\d+)',
+                                        r'[?&]id=(\d+)',
+                                        r'facebook\.com/([^/?&]+)/?$',
+                                        r'(\d{10,})'
+                                    ]
+                                    
+                                    for pattern in uid_patterns:
+                                        try:
+                                            uid_match = re.search(pattern, link_href)
+                                            if uid_match:
+                                                potential_uid = uid_match.group(1)
+                                                if potential_uid.isdigit() and len(potential_uid) >= 8:
+                                                    extracted_uid = potential_uid
+                                                    break
+                                                elif not potential_uid.isdigit() and len(potential_uid) >= 3:
+                                                    extracted_uid = f"username:{potential_uid}"
+                                                    break
+                                        except:
+                                            continue
+                                    
+                                    # Cập nhật thông tin user nếu có UID
+                                    if extracted_uid != "Unknown":
+                                        username = link_text
+                                        uid = extracted_uid
+                                        
+                                        if link_href.startswith('/'):
+                                            profile_href = f"https://www.facebook.com{link_href}"
+                                        else:
+                                            profile_href = link_href
+                                        
+                                        print(f"      ✅ Updated profile: {username} -> UID: {uid}")
+                                        break  # Đã tìm thấy profile, break
+                                        
+                        except Exception as e:
+                            print(f"      Error processing profile link {link_index+1}: {e}")
+                            continue
+                        
             except Exception as e:
-                print(f"    Error in focused method: {e}")
+                print(f"    Error finding links: {e}")
             
-            # FIXED: Fallback - only for non-anonymous users who don't have username yet
+            # FALLBACK: Nếu chưa có comment link, tìm BẤT KỲ link nào có comment_id
+            if not comment_link:
+                print(f"    ⚠️ No comment link found, trying AGGRESSIVE fallback method...")
+                try:
+                    # Phương pháp 1: Tìm tất cả link có comment_id trong toàn bộ element
+                    fallback_links = element.find_elements(By.XPATH, ".//a[contains(@href, 'comment_id=')]")
+                    print(f"    Found {len(fallback_links)} fallback links with comment_id")
+                    
+                    for fallback_link in fallback_links:
+                        try:
+                            fallback_href = fallback_link.get_attribute("href") or ""
+                            if ('facebook.com' in fallback_href and 
+                                'comment_id=' in fallback_href and 
+                                '/groups/' in fallback_href and 
+                                '/posts/' in fallback_href):
+                                comment_link = fallback_href.replace('&amp;', '&')
+                                print(f"    🔗 Fallback Method 1: Found comment link -> {comment_link[:80]}...")
+                                break
+                        except:
+                            continue
+                    
+                    # Phương pháp 2: Nếu vẫn chưa có, tìm trong toàn bộ trang
+                    if not comment_link:
+                        print(f"    ⚠️ Still no comment link, trying page-wide search...")
+                        page_links = self.driver.find_elements(By.XPATH, "//a[contains(@href, 'comment_id=')]")
+                        print(f"    Found {len(page_links)} page-wide links with comment_id")
+                        
+                        for page_link in page_links[:10]:  # Chỉ kiểm tra 10 link đầu
+                            try:
+                                page_href = page_link.get_attribute("href") or ""
+                                if ('facebook.com' in page_href and 
+                                    'comment_id=' in page_href and 
+                                    '/groups/' in page_href and 
+                                    '/posts/' in page_href):
+                                    comment_link = page_href.replace('&amp;', '&')
+                                    print(f"    🔗 Fallback Method 2: Found comment link -> {comment_link[:80]}...")
+                                    break
+                            except:
+                                continue
+                                
+                except Exception as e:
+                    print(f"    Error in fallback method: {e}")
+            
+            # Fallback cho username nếu chưa có
             if username == "Unknown" and not is_anonymous:
                 try:
                     children = element.find_elements(By.XPATH, "./*")
@@ -1033,64 +1309,70 @@ class FacebookGroupsScraper:
                         first_child_text = (children[0].text or "").strip()
                         if first_child_text:
                             first_line = first_child_text.splitlines()[0].strip()
-                            # Basic validation for a plausible name line
                             if (first_line and 2 <= len(first_line) <= 120 and 
                                 not first_line.startswith("http") and
                                 not any(keyword in first_line.lower() for keyword in ['anonymous', 'ẩn danh'])):
                                 username = first_line
-                                print(f"      ✅ Fallback name from first child: {username}")
+                                print(f"      ✅ Fallback name: {username}")
                 except Exception as e:
                     print(f"      ⚠️ Fallback name extraction error: {e}")
-            elif is_anonymous:
-                print(f"      🔍 FIXED: Anonymous user - keeping name as 'Unknown', not using fallback")
 
-            # FIXED: Final validation - allow anonymous users with "Unknown" name
+            # Kiểm tra cuối cùng - cho phép anonymous users
             if username == "Unknown" and not is_anonymous:
-                # Only skip if we couldn't extract username AND it's not anonymous
-                print("  ❌ FOCUSED extraction failed for this element (not anonymous, no username found)")
+                print("  ❌ Extraction failed for this element (not anonymous, no username found)")
                 return None
             elif is_anonymous:
-                print("  ✅ FIXED: Keeping anonymous user with name 'Unknown'")
+                print("  ✅ Keeping anonymous user with name 'Unknown'")
                 
-            print(f"  ✅ FOCUSED: Successfully extracted username: {username}")
+            print(f"  ✅ Successfully extracted username: {username}")
             if comment_link:
-                print(f"  🔗 FOCUSED: PostLink found: {comment_link[:80]}...")
+                print(f"  🔗 TIME CLICK COMMENT LINK found for ALL users: {comment_link[:80]}...")
+            else:
+                print(f"  ❌ CRITICAL ERROR: No comment link found for user: {username}")
+                print(f"  ⚠️ This should NEVER happen - all users MUST have comment links!")
+                print(f"  🔍 Debug info: Element text preview: {full_text[:100]}...")
             
             return {
                 "UID": uid,
                 "Name": username,
                 "ProfileLink": profile_href,
-                "CommentLink": comment_link,  # FIXED: Now includes PostLink from time clicks
-                "PostLink": comment_link,     # FIXED: Added PostLink field for consistency
+                "CommentLink": comment_link,  # Link khi click vào thời gian comment
                 "ElementIndex": index,
                 "TextPreview": full_text[:100] + "..." if len(full_text) > 100 else full_text,
-                "ContainerHeight": "Focused on larger height container"
+                "ContainerHeight": "Ultra Fast - Time Click Links"
             }
             
         except Exception as e:
-            print(f"Error in focused extraction: {e}")
+            print(f"Error in ultra fast extraction: {e}")
             return None
 
-    def scrape_all_comments(self, limit=0, resolve_uid=True, progress_callback=None):
-        """Main scraping orchestrator with FOCUSED approach"""
-        print(f"=== STARTING FOCUSED GROUPS SCRAPING ===")
+    def scrape_all_comments_ultra_fast(self, limit=0, resolve_uid=True, progress_callback=None):
+        """Ultra fast main scraping orchestrator"""
+        print(f"⚡ ULTRA FAST SCRAPING STARTING")
         
         if self._stop_flag:
             return []
         
-        # Step 1: Extract comments with focus
-        comments = self.extract_groups_comments()
+        # Setup
+        self.comment_limit = limit
+        self.progress_callback = progress_callback
+        self.extracted_count = 0
         
-        # Step 2: Apply limit
+        # Extract comments ultra fast
+        comments = self.extract_comments_ultra_fast()
+        
+        # Apply limit
         if limit > 0 and len(comments) > limit:
             comments = comments[:limit]
-            print(f"📊 Limited to {limit} comments")
         
-        # Step 3: Progress reporting
+        # Final progress
         if progress_callback:
-            progress_callback(len(comments))
+            final_text = f"Hoàn thành: {len(comments)} comments"
+            if limit > 0:
+                final_text += f" / {limit}"
+            progress_callback(len(comments), final_text)
         
-        print(f"✅ FOCUSED scraping completed: {len(comments)} comments extracted")
+        print(f"⚡ ULTRA FAST SCRAPING COMPLETE: {len(comments)} comments")
         return comments
 
     def close(self):
@@ -1100,416 +1382,376 @@ class FacebookGroupsScraper:
             pass
 
 # ----------------------------
-# FOCUSED GUI (unchanged, just updated title)
+# Ultra Fast GUI
 # ----------------------------
 
-class FBGroupsAppGUI:
+class UltraFastFBGroupsAppGUI:
     def __init__(self, root):
         self.root = root
-        root.title("🎯 FB Groups Comment Scraper - FIXED PostLink")
-        root.geometry("1100x950")
-        root.configure(bg="#121212")
-
-        # Main frame
-        main_frame = tk.Frame(root, bg="#121212")
-        main_frame.pack(fill=tk.BOTH, expand=True, padx=20, pady=15)
-
-        # Header
-        header_frame = tk.Frame(main_frame, bg="#121212")
-        header_frame.pack(fill="x", pady=(0,20))
+        self.setup_window()
+        self.create_widgets()
+        self.initialize_variables()
         
-        title_label = tk.Label(header_frame, text="🎯 Facebook Groups Comment Scraper - FIXED UID + PostLink", 
-                              font=("Arial", 20, "bold"), bg="#121212", fg="#a5d6a7")
+    def setup_window(self):
+        """Setup ultra fast window"""
+        self.root.title("⚡ Facebook Groups Ultra Fast Scraper - ULTRA PERFORMANCE + SAVE ON STOP")
+        self.root.geometry("1000x800")
+        self.root.configure(bg="#0a0a0a")
+        
+        # Center window
+        self.root.update_idletasks()
+        x = (self.root.winfo_screenwidth() // 2) - (1000 // 2)
+        y = (self.root.winfo_screenheight() // 2) - (800 // 2)
+        self.root.geometry(f"1000x800+{x}+{y}")
+        
+    def create_widgets(self):
+        """Create ultra fast widgets - SINGLE URL MODE"""
+        main_frame = tk.Frame(self.root, bg="#0a0a0a")
+        main_frame.pack(fill="both", expand=True, padx=10, pady=10)
+        
+        # Header
+        header_frame = tk.Frame(main_frame, bg="#0a0a0a")
+        header_frame.pack(fill="x")
+        
+        title_label = tk.Label(header_frame, text="⚡ Facebook Groups Ultra Fast Scraper", 
+                              font=("Arial", 18, "bold"), bg="#0a0a0a", fg="#00ff00")
         title_label.pack()
         
-        subtitle_label = tk.Label(header_frame, text="🆔 FIXED UID extraction + 🔗 PostLink từ thời gian + 👻 Anonymous users support", 
-                                 font=("Arial", 11), bg="#121212", fg="#b0b0b0")
+        subtitle_label = tk.Label(header_frame, text="🚀 TIME CLICK COMMENT LINKS + CONTINUE FROM COMMENT: Paste comment link để chạy tiếp từ comment cụ thể!", 
+                                 font=("Arial", 10), bg="#0a0a0a", fg="#888888")
         subtitle_label.pack(pady=(5,0))
-
-        # Input section
-        input_frame = tk.LabelFrame(main_frame, text="📝 Thông tin bài viết Groups", font=("Arial", 12, "bold"), 
-                                   bg="#121212", fg="#a5d6a7", relief="groove", bd=2)
+        
+        # Input section - SINGLE URL
+        input_frame = tk.LabelFrame(main_frame, text="📝 Thông tin", font=("Arial", 12, "bold"), 
+                                   bg="#0a0a0a", fg="#00ff00", relief="groove", bd=2)
         input_frame.pack(fill="x", pady=(0,15))
-
-        tk.Label(input_frame, text="🔗 Link bài viết trong Groups:", bg="#121212", font=("Arial", 10)).pack(anchor="w", padx=15, pady=(15,5))
-        self.entry_url = tk.Entry(input_frame, width=100, font=("Arial", 9))
+        
+        tk.Label(input_frame, text="🔗 Link bài viết Groups:", bg="#0a0a0a", font=("Arial", 10)).pack(anchor="w", padx=15, pady=(15,5))
+        self.entry_url = tk.Entry(input_frame, width=80, font=("Arial", 9))
         self.entry_url.pack(fill="x", padx=15, pady=(0,10))
-
-        tk.Label(input_frame, text="🍪 Cookie Facebook (để truy cập Groups):", bg="#121212", font=("Arial", 10)).pack(anchor="w", padx=15, pady=(5,5))
-        self.txt_cookie = tk.Text(input_frame, height=4, font=("Arial", 8))
-        self.txt_cookie.pack(fill="x", padx=15, pady=(0,15))
-
-        # Options section
-        options_frame = tk.LabelFrame(main_frame, text="🎯 Cấu hình FOCUSED Version", font=("Arial", 12, "bold"), 
-                                     bg="#121212", fg="#a5d6a7", relief="groove", bd=2)
-        options_frame.pack(fill="x", pady=(0,15))
         
-        opt_grid = tk.Frame(options_frame, bg="#121212")
-        opt_grid.pack(fill="x", padx=15, pady=15)
+        tk.Label(input_frame, text="🍪 Cookie Facebook:", bg="#0a0a0a", font=("Arial", 10)).pack(anchor="w", padx=15, pady=(5,5))
+        self.txt_cookie = tk.Text(input_frame, height=4, font=("Arial", 9))
+        self.txt_cookie.pack(fill="x", padx=15, pady=(0,10))
         
-        # Options grid
-        tk.Label(opt_grid, text="📊 Số lượng comment:", bg="#121212").grid(row=0, column=0, sticky="w")
-        self.entry_limit = tk.Entry(opt_grid, width=10)
+        tk.Label(input_frame, text="🔢 Giới hạn comments (0 = không giới hạn):", bg="#0a0a0a", font=("Arial", 10)).pack(anchor="w", padx=15, pady=(5,5))
+        self.entry_limit = tk.Entry(input_frame, font=("Arial", 9))
         self.entry_limit.insert(0, "0")
-        self.entry_limit.grid(row=0, column=1, sticky="w", padx=(10,20))
-        tk.Label(opt_grid, text="(0 = tất cả)", bg="#121212", fg="#6c757d").grid(row=0, column=2, sticky="w")
-
-        self.headless_var = tk.BooleanVar(value=False)  # Default to visible for debugging
-        tk.Checkbutton(opt_grid, text="👻 Chạy ẩn", variable=self.headless_var,
-                      bg="#121212", font=("Arial", 9)).grid(row=1, column=0, sticky="w", pady=(10,0))
-
-        self.resolve_uid_var = tk.BooleanVar(value=True)
-        tk.Checkbutton(opt_grid, text="🆔 Lấy UID", variable=self.resolve_uid_var, 
-                      bg="#121212", font=("Arial", 9)).grid(row=1, column=1, sticky="w", pady=(10,0))
-
-        # File section
-        file_frame = tk.LabelFrame(main_frame, text="💾 Xuất kết quả", font=("Arial", 12, "bold"), 
-                                  bg="#121212", fg="#a5d6a7", relief="groove", bd=2)
-        file_frame.pack(fill="x", pady=(0,15))
+        self.entry_limit.pack(fill="x", padx=15, pady=(0,10))
         
-        file_row = tk.Frame(file_frame, bg="#121212")
-        file_row.pack(fill="x", padx=15, pady=15)
+        # Comment Link section
+        tk.Label(input_frame, text="🔗 Comment Link (tùy chọn - để chạy tiếp từ comment cụ thể):", bg="#0a0a0a", font=("Arial", 10)).pack(anchor="w", padx=15, pady=(5,5))
+        self.entry_comment_link = tk.Entry(input_frame, width=80, font=("Arial", 9))
+        self.entry_comment_link.pack(fill="x", padx=15, pady=(0,10))
+        tk.Label(input_frame, text="💡 Tip: Paste comment link từ Excel để chạy tiếp từ comment đó", bg="#0a0a0a", font=("Arial", 8), fg="#888888").pack(anchor="w", padx=15, pady=(0,5))
         
-        self.entry_file = tk.Entry(file_row, width=70, font=("Arial", 9))
-        current_date = datetime.now().strftime("%d/%m/%Y")
-        self.entry_file.insert(0, f"facebook_groups_comments_FIXED_{current_date}.xlsx")
+        # File output section with choose button
+        file_frame = tk.Frame(input_frame, bg="#0a0a0a")
+        file_frame.pack(fill="x", padx=15, pady=(5,10))
+        
+        tk.Label(file_frame, text="💾 File output:", bg="#0a0a0a", font=("Arial", 10)).pack(anchor="w")
+        
+        file_input_frame = tk.Frame(file_frame, bg="#0a0a0a")
+        file_input_frame.pack(fill="x", pady=(5,0))
+        
+        self.entry_file = tk.Entry(file_input_frame, font=("Arial", 9))
+        self.entry_file.insert(0, "ultra_fast_comments.xlsx")
         self.entry_file.pack(side="left", fill="x", expand=True)
         
-        self.btn_choose = tk.Button(file_row, text="📁 Chọn", command=self.choose_file, 
-                 bg="#17a2b8", fg="black", font=("Arial", 9))
-        self.btn_choose.pack(side="right", padx=(10,0))
-
-        # Status section
-        status_frame = tk.LabelFrame(main_frame, text="📊 Trạng thái thực thi - FIXED", font=("Arial", 12, "bold"), 
-                                    bg="#121212", fg="#a5d6a7", relief="groove", bd=2)
-        status_frame.pack(fill="x", pady=(0,15))
+        self.btn_choose_file = tk.Button(file_input_frame, text="📁 Chọn", command=self.choose_file, 
+                                        bg="#17a2b8", fg="white", font=("Arial", 9), bd=0, padx=10, pady=2)
+        self.btn_choose_file.pack(side="right", padx=(10,0))
         
-        self.lbl_status = tk.Label(status_frame, text="✅ FIXED PostLink scraper sẵn sàng - Lấy đúng link comment từ thời gian!", fg="#28a745", 
-                                  wraplength=900, justify="left", font=("Arial", 11), bg="#121212")
+        # Checkboxes
+        checkbox_frame = tk.Frame(input_frame, bg="#0a0a0a")
+        checkbox_frame.pack(fill="x", padx=15, pady=(10,0))
+        
+        self.headless_var = tk.BooleanVar(value=True)
+        self.headless_check = tk.Checkbutton(checkbox_frame, text="Headless Browser", variable=self.headless_var, 
+                                            bg="#0a0a0a", fg="#ffffff", selectcolor="#0a0a0a", 
+                                            activebackground="#0a0a0a", activeforeground="#ffffff")
+        self.headless_check.pack(side="left", padx=(0,20))
+        
+        # Buttons
+        button_frame = tk.Frame(main_frame, bg="#0a0a0a")
+        button_frame.pack(fill="x", pady=(10,0))
+        
+        self.btn_start = tk.Button(button_frame, text="⚡ Bắt đầu Ultra Fast", command=self.start_scrape_thread, 
+                                  bg="#0066cc", fg="white", font=("Arial", 10, "bold"), bd=0, padx=20, pady=5)
+        self.btn_start.pack(side="left", padx=5)
+        
+        self.btn_stop = tk.Button(button_frame, text="⏹ Dừng và Lưu", command=self.stop_scrape, 
+                                 bg="#cc0000", fg="white", font=("Arial", 10, "bold"), bd=0, padx=20, pady=5, state=tk.DISABLED)
+        self.btn_stop.pack(side="left", padx=5)
+        
+        # Status
+        status_frame = tk.LabelFrame(main_frame, text="📊 Trạng thái", font=("Arial", 12, "bold"), 
+                                    bg="#0a0a0a", fg="#00ff00", relief="groove", bd=2)
+        status_frame.pack(fill="both", expand=True, pady=(10,0))
+        
+        self.progress_var = tk.IntVar()
+        self.progress_bar = ttk.Progressbar(status_frame, mode='indeterminate')
+        self.progress_bar.pack(fill="x", padx=15, pady=(15,10))
+        
+        self.lbl_status = tk.Label(status_frame, text="⚡ Ultra Fast Scraper sẵn sàng - CONTINUE FROM COMMENT!", fg="#00ff00", 
+                                  wraplength=800, justify="left", font=("Arial", 11), bg="#0a0a0a")
         self.lbl_status.pack(anchor="w", padx=15, pady=(15,5))
-
-        self.lbl_progress_detail = tk.Label(status_frame, text="🆔 FIXED UID + PostLink features: 1) Groups user pattern (/groups/.../user/{UID}/), 2) Time click detection, 3) Anonymous users support (Unknown name), 4) Smart deduplication, 5) Enhanced debugging",
-                                          fg="#b0b0b0", wraplength=900, justify="left", font=("Arial", 9), bg="#121212")
+        
+        self.lbl_progress_detail = tk.Label(status_frame, text="🚀 CONTINUE FROM COMMENT: Paste comment link để chạy tiếp từ comment cụ thể. Features: Comment link detection, Auto-scroll to comment, Time-based comment links, All Comments view, Groups UID patterns",
+                                          fg="#888888", wraplength=800, justify="left", font=("Arial", 9), bg="#0a0a0a")
         self.lbl_progress_detail.pack(anchor="w", padx=15, pady=(0,10))
-
+        
         # Progress bar
         self.progress_bar = ttk.Progressbar(status_frame, mode='indeterminate')
         self.progress_bar.pack(fill="x", padx=15, pady=(0,15))
-
-        # Control buttons
-        button_frame = tk.Frame(main_frame, bg="#121212")
-        button_frame.pack(fill="x", pady=20)
         
-        self.btn_start = tk.Button(button_frame, text="🚀 Bắt đầu FIXED Scraping", bg="#28a745", fg="black", 
-                                  font=("Arial", 14, "bold"), command=self.start_scrape_thread, 
-                                  pady=12, padx=40)
-        self.btn_start.pack(side="left")
-
-        self.btn_stop = tk.Button(button_frame, text="⏹️ Dừng", bg="#dc3545", fg="black", 
-                                 font=("Arial", 14, "bold"), command=self.stop_scrape, 
-                                 state=tk.DISABLED, pady=12, padx=40)
-        self.btn_stop.pack(side="left", padx=(25,0))
-
-        self.progress_var = tk.IntVar(value=0)
-        self.progress_label = tk.Label(button_frame, textvariable=self.progress_var, fg="#28a745", 
-                                     font=("Arial", 18, "bold"), bg="#121212")
-        self.progress_label.pack(side="right")
-
+    def initialize_variables(self):
+        """Initialize variables"""
         self._scrape_thread = None
         self._stop_flag = False
         self.scraper = None
-
-        # Apply dark theme across widgets
-        self._apply_dark_theme()
-
-        # Beautify primary (start) and danger (stop) buttons
-        self._beautify_button(self.btn_start, base_bg="#2ecc71", hover_bg="#27ae60", active_bg="#1e874b")
-        self._beautify_button(self.btn_stop, base_bg="#e74c3c", hover_bg="#c0392b", active_bg="#992d22")
-        # Beautify choose file button with cyan palette
-        self._beautify_button(self.btn_choose, base_bg="#17a2b8", hover_bg="#1491a1", active_bg="#0f6f7b")
-
-    def _apply_dark_theme(self):
-        """Apply a dark theme recursively to Tk widgets and ttk components."""
-        dark_bg = "#121212"
-        surface_bg = "#1e1e1e"
-        light_fg = "#e0e0e0"
-        subtle_fg = "#b0b0b0"
-
-        # Root background
-        try:
-            self.root.configure(bg=dark_bg)
-        except Exception:
-            pass
-
-        def apply(widget):
-            # Background
-            try:
-                if 'background' in widget.configure():
-                    widget.configure(bg=dark_bg)
-            except Exception:
-                pass
-
-            # Foreground: only adjust if currently black/dark default
-            try:
-                # Skip changing foreground for clickable buttons so custom styles persist
-                if isinstance(widget, tk.Button):
-                    pass
-                else:
-                    cfg = widget.configure()
-                    if 'foreground' in cfg:
-                        current_fg = str(widget.cget('fg')).lower()
-                        if current_fg in ('black', '#000000'):
-                            widget.configure(fg=light_fg)
-            except Exception:
-                pass
-
-            # Special cases
-            try:
-                if isinstance(widget, tk.Entry):
-                    widget.configure(bg=surface_bg, fg=light_fg, insertbackground=light_fg)
-                if isinstance(widget, tk.Text):
-                    widget.configure(bg=surface_bg, fg=light_fg, insertbackground=light_fg)
-                if isinstance(widget, tk.Listbox):
-                    widget.configure(bg=surface_bg, fg=light_fg, selectbackground="#2a2a2a")
-            except Exception:
-                pass
-
-            for child in widget.winfo_children():
-                apply(child)
-
-        apply(self.root)
-
-        # ttk styling (progress bar)
-        try:
-            style = ttk.Style()
-            # Use a theme that allows color customization
-            try:
-                style.theme_use('clam')
-            except Exception:
-                pass
-            style.configure("TProgressbar",
-                            troughcolor=surface_bg,
-                            background="#00bcd4",
-                            bordercolor=surface_bg,
-                            lightcolor=surface_bg,
-                            darkcolor=surface_bg)
-        except Exception:
-            pass
-
-    def _beautify_button(self, button, base_bg="#2ecc71", hover_bg="#27ae60", active_bg="#1e874b"):
-        """Apply modern flat styling and hover/active effects to tk.Button."""
-        try:
-            button.configure(
-                bg=base_bg,
-                fg="#000000",
-                activebackground=active_bg,
-                activeforeground="#000000",
-                bd=0,
-                highlightthickness=0,
-                relief="flat",
-                cursor="hand2",
-                disabledforeground="#777777"
-            )
-
-            def on_enter(_):
-                try:
-                    button.configure(bg=hover_bg)
-                except Exception:
-                    pass
-
-            def on_leave(_):
-                try:
-                    button.configure(bg=base_bg)
-                except Exception:
-                    pass
-
-            def on_press(_):
-                try:
-                    button.configure(bg=active_bg)
-                except Exception:
-                    pass
-
-            def on_release(_):
-                try:
-                    button.configure(bg=hover_bg)
-                except Exception:
-                    pass
-
-            button.bind("<Enter>", on_enter)
-            button.bind("<Leave>", on_leave)
-            button.bind("<ButtonPress-1>", on_press)
-            button.bind("<ButtonRelease-1>", on_release)
-        except Exception:
-            pass
-
+        self.current_comments = []
+        
     def choose_file(self):
+        """Choose output file"""
         f = filedialog.asksaveasfilename(
             defaultextension=".xlsx", 
             filetypes=[("Excel files", "*.xlsx"), ("CSV files", "*.csv")],
-            title="Chọn file để lưu FIXED Groups comments"
+            title="Chọn file để lưu Ultra Fast comments"
         )
         if f:
             self.entry_file.delete(0, tk.END)
             self.entry_file.insert(0, f)
-
+    
     def start_scrape_thread(self):
+        """Start ultra fast scraping"""
         url = self.entry_url.get().strip()
         cookie_str = self.txt_cookie.get("1.0", tk.END).strip()
-        file_out = self.entry_file.get().strip() or "facebook_groups_comments_FIXED.xlsx"
+        file_out = self.entry_file.get().strip() or "ultra_fast_comments.xlsx"
+        comment_link = self.entry_comment_link.get().strip()
         
         if not url:
             messagebox.showerror("❌ Lỗi", "Vui lòng nhập link bài viết Groups.")
             return
         
-        if "groups/" not in url:
-            result = messagebox.askyesno("⚠️ Xác nhận", 
-                                       "Link này có vẻ không phải Groups. Bạn có muốn tiếp tục không?")
-            if not result:
-                return
-        
         try: 
             limit = int(self.entry_limit.get().strip())
-        except: 
-            limit = 0
-
+            if limit < 0:
+                messagebox.showerror("❌ Lỗi", "Giới hạn comments phải là số không âm")
+                return
+            if limit > 100000:
+                result = messagebox.askyesno("⚠️ Cảnh báo", 
+                    f"Giới hạn {limit} comments rất lớn và có thể mất nhiều thời gian.\n"
+                    f"Bạn có chắc chắn muốn tiếp tục không?")
+                if not result:
+                    return
+        except ValueError:
+            messagebox.showerror("❌ Lỗi", "Giới hạn comments không hợp lệ")
+            return
+        
         self._stop_flag = False
         self.progress_var.set(0)
         self.progress_bar.start()
-        self.lbl_status.config(text="🔄 Đang khởi động FIXED Groups scraper...", fg="#fd7e14")
-        self.lbl_progress_detail.config(text="⏳ Initializing FIXED extraction logic with enhanced debugging...")
+        self.lbl_status.config(text="⚡ Đang khởi động Ultra Fast Scraper...", fg="#00ff00")
+        self.lbl_progress_detail.config(text="🚀 Initializing ultra fast extraction...")
         self.btn_start.config(state=tk.DISABLED)
         self.btn_stop.config(state=tk.NORMAL)
-
+        
         self._scrape_thread = threading.Thread(target=self._scrape_worker, 
                                              args=(url, cookie_str, file_out, limit, 
-                                                   self.headless_var.get(), self.resolve_uid_var.get()))
+                                                   self.headless_var.get(), comment_link))
         self._scrape_thread.daemon = True
         self._scrape_thread.start()
-
+    
     def stop_scrape(self):
+        """Stop scraping and save data"""
         self._stop_flag = True
         if self.scraper:
             self.scraper._stop_flag = True
-        self.lbl_status.config(text="⏹️ Đang dừng FIXED scraper...", fg="#dc3545")
+        
+        self.lbl_status.config(text="⏹️ Đang dừng và lưu dữ liệu...", fg="#ff0000")
+        self.lbl_progress_detail.config(text="💾 Saving current data...")
         self.btn_stop.config(state=tk.DISABLED)
-
-    def _progress_cb(self, count):
-        self.progress_var.set(count)
-        self.lbl_status.config(text=f"📈 FIXED processing... Đã lấy {count} comments", fg="#28a745")
-        self.root.update_idletasks()
-
-    def _scrape_worker(self, url, cookie_str, file_out, limit, headless, resolve_uid):
+        
+        # Save current data - ENHANCED with multiple fallback methods
         try:
-            # Initialize
-            self.lbl_status.config(text="🌐 Khởi tạo FIXED Groups scraper...", fg="#fd7e14")
-            self.scraper = FacebookGroupsScraper(cookie_str, headless=headless)
+            # Method 1: Try to get data from scraper's current_comments_data
+            current_data = []
+            if hasattr(self, 'scraper') and self.scraper and hasattr(self.scraper, 'current_comments_data'):
+                current_data = self.scraper.current_comments_data
+                print(f"💾 Found {len(current_data)} comments from scraper.current_comments_data")
             
-            if self._stop_flag: return
+            # Method 2: Fallback to GUI's current_comments
+            if not current_data and hasattr(self, 'current_comments') and self.current_comments:
+                current_data = self.current_comments
+                print(f"💾 Found {len(current_data)} comments from GUI current_comments")
             
-            # Load post
-            self.lbl_status.config(text="📄 Đang tải bài viết Groups với FIXED logic...", fg="#fd7e14")
-            self.lbl_progress_detail.config(text="⏳ Loading post with enhanced error handling...")
-            success = self.scraper.load_post(url)
+            # Method 3: Try to get from progress callback data
+            if not current_data and hasattr(self, '_last_progress_data'):
+                current_data = self._last_progress_data
+                print(f"💾 Found {len(current_data)} comments from last progress data")
             
-            if not success:
-                self.lbl_status.config(text="❌ Không thể tải bài viết Groups", fg="#dc3545")
-                self.lbl_progress_detail.config(text="💡 Kiểm tra: 1) Cookie valid, 2) Quyền truy cập Groups, 3) Link chính xác")
+            if current_data:
+                file_out = self.entry_file.get().strip()
+                if not file_out:
+                    file_out = f"ultra_fast_stopped_{datetime.now().strftime('%d_%m_%Y_%H_%M')}.xlsx"
+                
+                success = save_to_excel_fast(current_data, file_out)
+                if success:
+                    self.lbl_status.config(text=f"✅ Đã dừng và lưu {len(current_data)} comments", fg="#00ff00")
+                    self.lbl_progress_detail.config(text=f"💾 Dữ liệu đã lưu vào: {file_out}")
+                    
+                    messagebox.showinfo("Đã dừng và lưu", 
+                        f"Ultra Fast Scraping đã được dừng!\n\n"
+                        f"📊 Đã lưu: {len(current_data)} comments\n"
+                        f"💾 File: {file_out}")
+                else:
+                    self.lbl_status.config(text="⚠️ Đã dừng nhưng không thể lưu", fg="#ffaa00")
+            else:
+                self.lbl_status.config(text="⚠️ Đã dừng nhưng không có dữ liệu để lưu", fg="#ffaa00")
+                print("⚠️ No data found to save when stopping")
+        except Exception as e:
+            self.lbl_status.config(text=f"❌ Lỗi khi lưu: {str(e)[:50]}...", fg="#ff0000")
+            print(f"❌ Error saving data when stopping: {e}")
+        else:
+            self.lbl_status.config(text="⏹️ Đã dừng (chưa có dữ liệu)", fg="#ffaa00")
+    
+    def _progress_callback(self, count, detail=""):
+        """Enhanced progress callback with detailed tracking and data saving"""
+        self.progress_var.set(count)
+        
+        if detail:
+            self.lbl_status.config(text=f"⚡ {detail}", fg="#00ff00")
+        else:
+            self.lbl_status.config(text=f"⚡ Ultra Fast: {count} comments", fg="#00ff00")
+        
+        # Store current data for save on stop
+        if hasattr(self, 'scraper') and self.scraper and hasattr(self.scraper, 'current_comments_data'):
+            self.current_comments = self.scraper.current_comments_data
+            self._last_progress_data = self.scraper.current_comments_data
+            print(f"💾 Progress callback: Stored {len(self.scraper.current_comments_data)} comments for save on stop")
+        
+        # Enhanced progress detail
+        if detail:
+            self.lbl_progress_detail.config(text=f"🚀 Ultra fast extraction in progress...")
+        else:
+            self.lbl_progress_detail.config(text=f"📊 Đang trích xuất dữ liệu từ Facebook Groups...")
+    
+    def _scrape_worker(self, url, cookie_str, file_out, limit, headless, comment_link):
+        """Ultra fast worker thread"""
+        scraper = None
+        try:
+            self.root.after(0, lambda: self.lbl_status.config(text="⚡ Khởi tạo Ultra Fast Browser...", fg="#00ff00"))
+            self.root.after(0, lambda: self.lbl_progress_detail.config(text="🚀 Setting up ultra optimized Chrome..."))
+            
+            # Initialize ultra fast scraper
+            scraper = UltraFastFacebookGroupsScraper(cookie_str, headless=headless)
+            self.scraper = scraper
+            
+            # Check if comment link is provided
+            if comment_link:
+                self.root.after(0, lambda: self.lbl_progress_detail.config(text=f"🔗 Loading from comment link: {comment_link[:50]}..."))
+                
+                # Load from comment link first
+                if not scraper.load_post_ultra_fast(comment_link):
+                    self.root.after(0, lambda: self.lbl_progress_detail.config(text="⚠️ Comment link failed, trying main post URL..."))
+                    # Fallback to main post URL
+                    if not scraper.load_post_ultra_fast(url):
+                        raise Exception("Không thể tải bài viết từ cả comment link và main URL")
+                else:
+                    self.root.after(0, lambda: self.lbl_progress_detail.config(text="✅ Loaded from comment link successfully"))
+            else:
+                self.root.after(0, lambda: self.lbl_progress_detail.config(text="⚡ Loading post ultra fast..."))
+                
+                # Load post ultra fast
+                if not scraper.load_post_ultra_fast(url):
+                    raise Exception("Không thể tải bài viết")
+            
+            self.root.after(0, lambda: self.lbl_progress_detail.config(text="🚀 Ultra fast comment extraction..."))
+            
+            # Define enhanced progress callback
+            def progress_callback(count, detail=""):
+                # Store current comments for save on stop
+                if hasattr(scraper, 'current_comments_data'):
+                    self.current_comments = scraper.current_comments_data
+                else:
+                    self.current_comments = []
+                self.root.after(0, self._progress_callback, count, detail)
+            
+            # Extract comments ultra fast
+            comments_data = scraper.scrape_all_comments_ultra_fast(
+                limit=limit, 
+                resolve_uid=True, 
+                progress_callback=progress_callback
+            )
+            
+            # Store final comments for potential save on stop
+            self.current_comments = comments_data
+            
+            if self._stop_flag:
+                self.root.after(0, lambda: self.lbl_status.config(text="⏹️ Đã dừng theo yêu cầu", fg="#ffaa00"))
                 return
             
-            # Show detected layout
-            layout = getattr(self.scraper, 'current_layout', 'unknown')
-            self.lbl_progress_detail.config(text=f"🎯 Layout detected: {layout} - Using FIXED extraction methods...")
-                
-            if self._stop_flag: return
+            if not comments_data:
+                raise Exception("Không tìm thấy comments")
             
-            # Scrape with FIXED logic
-            self.lbl_status.config(text=f"🔍 FIXED Groups extraction ({layout})...", fg="#fd7e14")
-            self.lbl_progress_detail.config(text="⏳ Using enhanced username extraction with multiple fallback strategies...")
+            # Ultra fast save
+            self.root.after(0, lambda: self.lbl_progress_detail.config(text="⚡ Ultra fast saving..."))
             
-            comments = self.scraper.scrape_all_comments(limit=limit, resolve_uid=resolve_uid, 
-                                                       progress_callback=self._progress_cb)
+            success = save_to_excel_fast(comments_data, file_out)
             
-            print(f"✅ Comments: {comments}")
-
-            if self._stop_flag: return
+            if not success:
+                raise Exception("Không thể lưu file")
             
-            # Save
-            self.lbl_status.config(text="💾 Đang lưu FIXED Groups data...", fg="#fd7e14")
+            # Success
+            self.root.after(0, lambda: self.lbl_status.config(text="🎉 ULTRA FAST HOÀN THÀNH!", fg="#00ff00"))
+            self.root.after(0, lambda: self.lbl_progress_detail.config(text=f"⚡ {len(comments_data)} comments saved ultra fast!"))
             
-            if comments:
-                df = pd.DataFrame(comments)
-                
-                # Add metadata
-                df.insert(0, 'STT', range(1, len(df) + 1))
-                df['Source'] = 'Facebook Groups - FIXED'
-                df['ScrapedAt'] = pd.Timestamp.now().strftime('%Y-%m-%d %H:%M:%S')
-                
-                # File handling
-                if not file_out.lower().endswith((".xlsx", ".csv")):
-                    file_out += ".xlsx"
-                
-                if file_out.lower().endswith(".csv"):
-                    df.to_csv(file_out, index=False, encoding="utf-8-sig")
-                else:
-                    df.to_excel(file_out, index=False, engine="openpyxl")
-                
-                # FIXED: Enhanced statistics with PostLink and UID tracking
-                unique_users = len(set(c['Name'] for c in comments if c['Name'] != 'Unknown'))
-                profile_links = len([c for c in comments if c['ProfileLink']])
-                uid_count = len([c for c in comments if c['UID'] != 'Unknown' and not c['UID'].startswith('username:') and c['UID'] != 'Anonymous'])  # FIXED: Real UIDs only
-                username_count = len([c for c in comments if c['UID'].startswith('username:')])  # FIXED: Username count
-                anonymous_count = len([c for c in comments if c['UID'] == 'Anonymous'])  # FIXED: Anonymous count
-                post_links = len([c for c in comments if c.get('PostLink')])  # FIXED: Count PostLinks
-                comment_links = len([c for c in comments if c.get('CommentLink')])  # FIXED: Count CommentLinks
-                
-                self.lbl_status.config(text=f"🎉 FIXED GROUPS SCRAPING HOÀN THÀNH!", fg="#28a745")
-                self.lbl_progress_detail.config(text=f"📊 FIXED Results: {len(comments)} comments | {unique_users} named users | {anonymous_count} anonymous | {uid_count} UIDs | {post_links} PostLinks | Layout: {layout}")
-                
-                print(f"🎯 FIXED SCRAPING COMPLETE!")
-                print(f"   📊 Results: {len(comments)} total comments")
-                print(f"   👥 Unique users: {unique_users}")
-                print(f"   🔗 Profile links: {profile_links}")
-                print(f"   🆔 Real UIDs extracted: {uid_count}")  # FIXED: Specify real UIDs
-                print(f"   👤 Usernames (not converted): {username_count}")  # FIXED: Username count
-                print(f"   👻 Anonymous users: {anonymous_count}")  # FIXED: Anonymous count
-                print(f"   🔗 PostLinks (time clicks): {post_links}")
-                print(f"   💬 CommentLinks: {comment_links}")
-                print(f"   📱 Layout used: {layout}")
-                print(f"   💾 Saved to: {file_out}")
-                print(f"   🔍 Debug files: debug_focused_{layout}.html")
-                
-            else:
-                self.lbl_status.config(text="⚠️ Không tìm thấy comment với FIXED logic", fg="#ffc107")
-                self.lbl_progress_detail.config(text=f"💡 Layout: {layout} | Kiểm tra debug files để phân tích Facebook structure")
-                
-                print(f"⚠️ No comments found with FIXED logic")
-                print(f"   📱 Layout: {layout}")
-                print(f"   🔍 Debug files created: debug_groups_{layout}.html")
-                print(f"   💡 Suggestions:")
-                print(f"      1. Check if you have access to the Facebook Group")
-                print(f"      2. Verify the post URL is correct and public in the group")
-                print(f"      3. Try running without headless mode to see what's happening")
-                print(f"      4. Check the debug HTML file to understand the page structure")
-                
+            # Show success
+            def show_success():
+                messagebox.showinfo("Ultra Fast Success", 
+                    f"Ultra Fast Scraping hoàn thành!\n\n"
+                    f"⚡ Extracted: {len(comments_data)} comments\n"
+                    f"💾 Saved to: {file_out}\n"
+                    f"🚀 Ultra fast mode enabled!")
+            
+            self.root.after(0, show_success)
+            
         except Exception as e:
-            error_msg = str(e)[:120]
-            self.lbl_status.config(text=f"❌ Lỗi FIXED scraping: {error_msg}...", fg="#dc3545")
-            self.lbl_progress_detail.config(text="🔍 Xem console để biết chi tiết. FIXED version cung cấp nhiều debug info.")
-            print(f"FIXED Groups scraping error: {e}")
-            import traceback
-            traceback.print_exc()
+            error_msg = f"❌ Ultra Fast Error: {str(e)}"
+            error_detail = str(e)  # Capture error detail
+            self.root.after(0, lambda: self.lbl_status.config(text=error_msg, fg="#ff0000"))
+            self.root.after(0, lambda: self.lbl_progress_detail.config(text="Check inputs and try again"))
+            
+            def show_error():
+                messagebox.showerror("Ultra Fast Error", f"Scraping failed:\n{error_detail}")
+            
+            self.root.after(0, show_error)
+            
         finally:
-            self.progress_bar.stop()
-            if self.scraper: 
-                self.scraper.close()
-            self.btn_start.config(state=tk.NORMAL)
-            self.btn_stop.config(state=tk.DISABLED)
+            # Cleanup
+            if scraper:
+                try:
+                    scraper.close()
+                except:
+                    pass
+            
+            # Reset UI
+            self.root.after(0, self._reset_ui_after_scraping)
+    
+    def _reset_ui_after_scraping(self):
+        """Reset UI after scraping"""
+        self.progress_bar.stop()
+        self.btn_start.config(state=tk.NORMAL)
+        self.btn_stop.config(state=tk.DISABLED)
+        self._scrape_thread = None
+        self.scraper = None
 
 # ----------------------------
-# Run FIXED app
+# Run Ultra Fast App
 # ----------------------------
 
 if __name__ == "__main__":
     root = tk.Tk()
-    app = FBGroupsAppGUI(root)
+    app = UltraFastFBGroupsAppGUI(root)
     root.mainloop()
